@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
-<meta name="theme-color" content="#0d0d0d"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover"/>
+<meta name="theme-color" content="#09090b"/>
 <meta name="mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
@@ -11,630 +11,441 @@
 <title>TutorApp</title>
 <link rel="manifest" href="manifest.json"/>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Clash+Display:wght@500;600;700&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
-/* ══════════════════════════════════════════════════════════════════════════════
-   DESIGN: Dark cockpit — professional tutor dashboard. Deep blacks, electric
-   amber as the primary action color, teal for success, coral for debt.
-   Large touch targets, generous spacing. Feels like mission control.
-══════════════════════════════════════════════════════════════════════════════ */
 :root {
-  --bg:      #0d0d0d;
-  --bg1:     #131313;
-  --bg2:     #1a1a1a;
-  --bg3:     #222;
-  --bg4:     #2a2a2a;
-  --border:  #2e2e2e;
-  --border2: #3a3a3a;
+  --bg:     #09090b;
+  --bg1:    #0f0f12;
+  --bg2:    #18181c;
+  --bg3:    #222228;
+  --bg4:    #2c2c34;
+  --line:   #27272f;
+  --line2:  #35353f;
 
-  --amber:   #f5a623;
-  --amber-d: #c07d0e;
-  --amber-bg:#f5a62318;
-  --teal:    #2dd4bf;
-  --teal-bg: #2dd4bf18;
-  --coral:   #ff6b6b;
-  --coral-bg:#ff6b6b18;
-  --blue:    #60a5fa;
-  --blue-bg: #60a5fa18;
-  --purple:  #a78bfa;
-  --purple-bg:#a78bfa18;
-  --green:   #4ade80;
-  --green-bg:#4ade8018;
+  --amber:  #f59e0b;
+  --amber2: #fbbf24;
+  --abg:    rgba(245,158,11,.12);
+  --abg2:   rgba(245,158,11,.2);
+  --teal:   #14b8a6;
+  --tbg:    rgba(20,184,166,.12);
+  --coral:  #f87171;
+  --cbg:    rgba(248,113,113,.12);
+  --blue:   #60a5fa;
+  --bbg:    rgba(96,165,250,.12);
+  --violet: #a78bfa;
+  --vbg:    rgba(167,139,250,.12);
 
-  --text:    #f2f2f2;
-  --text2:   #d0d0d0;
-  --text3:   #b8b8b8;
+  --tx:  #f4f4f5;
+  --tx2: #d4d4d8;
+  --tx3: #a1a1aa;
 
-  --mono:    'DM Mono', monospace;
-  --display: 'Clash Display', 'Segoe UI', sans-serif;
-
-  --r:  10px;
-  --r2: 16px;
-  --r3: 22px;
-
-  --tab-h: 68px;
+  --sans: 'Plus Jakarta Sans', system-ui, sans-serif;
+  --mono: 'JetBrains Mono', monospace;
+  --r: 10px; --r2: 14px; --r3: 20px;
 }
 
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { height: 100%; background: var(--bg); color: var(--text); font-family: var(--display); -webkit-tap-highlight-color: transparent; }
-body { display: flex; flex-direction: column; }
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:var(--bg);color:var(--tx);font-family:var(--sans);-webkit-tap-highlight-color:transparent}
+body{display:flex;flex-direction:column}
+::-webkit-scrollbar{width:3px}
+::-webkit-scrollbar-thumb{background:var(--line2);border-radius:2px}
 
-/* ── Scrollbar ── */
-::-webkit-scrollbar { width: 4px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
-
-/* ── Header ── */
-.app-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 16px 20px 14px;
-  background: var(--bg1);
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
+/* ─── HEADER ─────────────────────────────────────────────── */
+.hdr{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 18px 12px;
+  background:linear-gradient(180deg,#0f0f13 0%,var(--bg) 100%);
+  border-bottom:1px solid var(--line);
+  flex-shrink:0;
 }
-.app-logo { font-size: 26px; font-weight: 700; letter-spacing: -.03em; color: var(--text); }
-.app-logo span { color: var(--amber); }
-.header-stats { display: flex; gap: 12px; }
-.hstat { text-align: right; }
-.hstat-label { font-family: var(--mono); font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: .1em; }
-.hstat-val { font-family: var(--mono); font-size: 20px; font-weight: 600; }
-.hstat.owed .hstat-val { color: var(--coral); }
-.hstat.paid .hstat-val { color: var(--teal); }
+.logo{font-size:21px;font-weight:800;letter-spacing:-.04em;color:var(--tx)}
+.logo span{color:var(--amber)}
+.hdr-nums{display:flex;gap:20px}
+.hnum{text-align:right}
+.hnum-lbl{font:500 10px/1 var(--mono);color:var(--tx3);text-transform:uppercase;letter-spacing:.12em;margin-bottom:3px}
+.hnum-val{font:600 19px/1 var(--mono)}
+.hnum.owed .hnum-val{color:var(--coral)}
+.hnum.paid .hnum-val{color:var(--teal)}
 
-/* ── Tab bar ── */
-.tab-bar {
-  display: flex;
-  background: var(--bg1);
-  border-bottom: 1px solid var(--border);
-  overflow-x: auto;
-  flex-shrink: 0;
-  scrollbar-width: none;
+/* ─── TAB BAR ────────────────────────────────────────────── */
+.tabs{
+  display:flex;background:var(--bg1);
+  border-bottom:1px solid var(--line);
+  overflow-x:auto;flex-shrink:0;scrollbar-width:none;
 }
-.tab-bar::-webkit-scrollbar { display: none; }
-.tab-btn {
-  flex: 1; min-width: 72px;
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 5px;
-  padding: 12px 6px 10px;
-  cursor: pointer;
-  border: none; background: transparent;
-  color: var(--text2);
-  font-family: var(--display); font-size: 13px; font-weight: 600;
-  letter-spacing: .01em;
-  border-bottom: 3px solid transparent;
-  transition: all .18s; white-space: nowrap;
-  -webkit-tap-highlight-color: transparent;
+.tabs::-webkit-scrollbar{display:none}
+.tb{
+  flex:1;min-width:68px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:4px;padding:11px 6px 9px;
+  border:none;background:transparent;
+  color:var(--tx3);font:600 12px/1 var(--sans);letter-spacing:.01em;
+  border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap;
+  transition:all .15s;
 }
-.tab-btn .ticon { font-size: 26px; line-height: 1; }
-.tab-btn:hover { color: var(--text); background: rgba(255,255,255,.04); }
-.tab-btn.active { color: var(--amber); border-bottom-color: var(--amber); background: rgba(245,166,35,.06); }
+.tb .ic{font-size:22px;line-height:1}
+.tb:hover{color:var(--tx2);background:rgba(255,255,255,.03)}
+.tb.on{color:var(--amber);border-bottom-color:var(--amber);background:rgba(245,158,11,.05)}
 
-/* ── Main content ── */
-.page { flex: 1; overflow-y: auto; padding: 20px 16px 100px; display: none; }
-.page.active { display: block; }
+/* ─── PAGES ──────────────────────────────────────────────── */
+.pg{flex:1;overflow-y:auto;padding:18px 16px 90px;display:none}
+.pg.on{display:block}
 
-/* ── Page title ── */
-.page-title {
-  font-size: 26px; font-weight: 700; letter-spacing: -.02em;
-  margin-bottom: 20px;
-  display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;
+/* ─── PAGE TITLE ─────────────────────────────────────────── */
+.ptitle{
+  font-size:24px;font-weight:800;letter-spacing:-.03em;
+  margin-bottom:18px;
+  display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;
 }
-.page-title-sub { font-family: var(--mono); font-size: 12px; color: var(--text2); font-weight: 400; }
+.ptitle-sub{font:500 12px/1 var(--mono);color:var(--tx3);font-weight:400}
 
-/* ── Cards ── */
-.card {
-  background: var(--bg1);
-  border: 1px solid var(--border);
-  border-radius: var(--r2);
-  margin-bottom: 12px;
-  overflow: hidden;
+/* ─── STAT CARDS ─────────────────────────────────────────── */
+.stats{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:18px}
+.sc{
+  flex:1;min-width:110px;
+  background:var(--bg2);border:1px solid var(--line);
+  border-radius:var(--r2);padding:14px 15px;
 }
-.card-hdr {
-  display: flex; justify-content: space-between; align-items: center;
-  padding: 16px 18px;
-  cursor: pointer;
-  gap: 10px; flex-wrap: wrap;
+.sc-lbl{font:500 11px/1 var(--mono);text-transform:uppercase;letter-spacing:.1em;margin-bottom:7px;color:var(--tx3)}
+.sc-val{font:600 22px/1 var(--mono)}
+.sc.owed .sc-lbl,.sc.owed .sc-val{color:var(--coral)}
+.sc.paid .sc-lbl,.sc.paid .sc-val{color:var(--teal)}
+.sc.earn .sc-lbl{color:var(--amber)}.sc.earn .sc-val{color:var(--amber)}
+
+/* ─── ENTRY GRID ─────────────────────────────────────────── */
+.egrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:18px}
+@media(max-width:420px){.egrid{grid-template-columns:1fr}}
+.ec{
+  background:var(--bg2);border:1.5px solid var(--line);
+  border-radius:var(--r2);padding:18px 14px 16px;
+  cursor:pointer;transition:all .18s;
+  display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px;
+  position:relative;overflow:hidden;
 }
-.card-hdr:hover { background: var(--bg2); }
-.card-body { padding: 16px 18px; }
+.ec::before{content:'';position:absolute;inset:0;background:var(--abg);opacity:0;transition:opacity .18s}
+.ec:hover,.ec.over{border-color:var(--amber)}
+.ec:hover::before,.ec.over::before{opacity:1}
+.ec-icon{font-size:32px;line-height:1}
+.ec-title{font-size:15px;font-weight:700;letter-spacing:-.01em}
+.ec-sub{font:400 11px/1.4 var(--mono);color:var(--tx3)}
 
-/* ── Entry method cards (tab 1) ── */
-.entry-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
-@media (max-width: 480px) { .entry-grid { grid-template-columns: 1fr; } }
-
-.entry-card {
-  background: var(--bg1);
-  border: 1.5px solid var(--border);
-  border-radius: var(--r2);
-  padding: 20px 16px;
-  cursor: pointer;
-  transition: all .18s;
-  display: flex; flex-direction: column; align-items: center; text-align: center; gap: 12px;
+/* ─── GENERIC CARD ───────────────────────────────────────── */
+.card{background:var(--bg1);border:1px solid var(--line);border-radius:var(--r2);margin-bottom:10px;overflow:hidden}
+.card-h{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:14px 16px;cursor:pointer;gap:8px;flex-wrap:wrap;
 }
-.entry-card:hover, .entry-card.over { border-color: var(--amber); background: var(--amber-bg); }
-.entry-card .eicon { font-size: 36px; line-height: 1; }
-.entry-card .etitle { font-size: 15px; font-weight: 600; }
-.entry-card .esub { font-family: var(--mono); font-size: 12px; color: var(--text2); line-height: 1.4; }
+.card-h:hover{background:var(--bg2)}
+.card-b{padding:14px 16px}
 
-/* ── Drop zone ── */
-.dropzone {
-  border: 2px dashed var(--border2);
-  border-radius: var(--r2);
-  padding: 32px 20px;
-  text-align: center;
-  cursor: pointer;
-  transition: all .18s;
-  margin-bottom: 12px;
+/* ─── SESSION CARD ───────────────────────────────────────── */
+.scard{background:var(--bg1);border:1px solid var(--line);border-radius:var(--r2);margin-bottom:10px;overflow:hidden}
+.scard-h{display:flex;justify-content:space-between;align-items:flex-start;padding:14px 16px;cursor:pointer;gap:10px}
+.scard-h:hover{background:var(--bg2)}
+.scard-name{
+  font-size:13px;font-weight:600;font-family:var(--mono);
+  color:var(--amber);letter-spacing:.02em;margin-bottom:3px;
 }
-.dropzone:hover, .dropzone.over { border-color: var(--amber); background: var(--amber-bg); }
-.dropzone .dz-icon { font-size: 40px; margin-bottom: 10px; }
-.dropzone .dz-title { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
-.dropzone .dz-hint { font-family: var(--mono); font-size: 12px; color: var(--text2); }
+.scard-subj{font-size:16px;font-weight:700;letter-spacing:-.02em;margin-bottom:3px}
+.scard-meta{font:400 12px/1.4 var(--mono);color:var(--tx3)}
+.scard-total{font:600 18px/1 var(--mono);color:var(--amber);text-align:right}
+.prog{display:flex;align-items:center;gap:6px;margin-top:5px;justify-content:flex-end}
+.pbar{width:56px;height:3px;border-radius:2px;background:var(--line2);overflow:hidden}
+.pfill{height:100%;background:var(--teal);border-radius:2px;transition:width .3s}
+.plbl{font:400 10px/1 var(--mono);color:var(--tx3)}
+.scard-body{padding:12px 16px 14px;border-top:1px solid var(--line)}
 
-/* ── Forms ── */
-.form-section { margin-bottom: 20px; }
-.field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
-.field label { font-family: var(--mono); font-size: 12px; color: var(--text); text-transform: uppercase; letter-spacing: .08em; font-weight: 500; }
-.inp {
-  background: var(--bg2);
-  border: 1.5px solid var(--border2);
-  border-radius: var(--r);
-  padding: 14px 15px;
-  color: var(--text);
-  font-family: var(--display); font-size: 16px;
-  outline: none;
-  transition: border .15s;
-  width: 100%;
+/* ─── STUDENT LINE ───────────────────────────────────────── */
+.sl{display:flex;align-items:center;gap:8px;padding:9px 0;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.sl:last-child{border-bottom:none}
+.dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.dot.live{background:var(--teal)}
+.dot.passive{background:var(--violet)}
+.sname{font-size:15px;font-weight:600;flex:1;min-width:90px}
+.samt{font:600 14px/1 var(--mono);color:var(--amber);white-space:nowrap}
+
+/* ─── BADGES ─────────────────────────────────────────────── */
+.badge{display:inline-flex;align-items:center;padding:3px 8px;border-radius:5px;font:600 10px/1 var(--mono);text-transform:uppercase;letter-spacing:.07em}
+.b-subj{background:var(--abg);color:var(--amber);border:1px solid rgba(245,158,11,.25)}
+.b-live{background:var(--tbg);color:var(--teal);border:1px solid rgba(20,184,166,.25)}
+.b-passive{background:var(--vbg);color:var(--violet);border:1px solid rgba(167,139,250,.25)}
+.b-paid{background:var(--tbg);color:var(--teal)}
+.b-unpaid{background:var(--cbg);color:var(--coral)}
+
+/* ─── PAID TOGGLE ────────────────────────────────────────── */
+.ptog{font:600 11px/1 var(--mono);padding:5px 10px;border-radius:6px;border:none;cursor:pointer;transition:all .12s}
+.ptog.yes{background:var(--tbg);color:var(--teal);border:1px solid rgba(20,184,166,.3)}
+.ptog.no{background:var(--cbg);color:var(--coral);border:1px solid rgba(248,113,113,.25)}
+
+/* ─── ABSENCE ITEMS ──────────────────────────────────────── */
+.abs{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:8px 12px;background:var(--cbg);border:1px solid rgba(248,113,113,.2);border-radius:8px;margin-bottom:6px;font:400 12px/1 var(--mono)}
+.abs-ts{color:var(--coral);font-weight:600}
+
+/* ─── FORMS ──────────────────────────────────────────────── */
+.fld{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+.fld label{font:600 11px/1 var(--mono);text-transform:uppercase;letter-spacing:.1em;color:var(--tx2)}
+.inp{
+  background:var(--bg3);border:1.5px solid var(--line2);border-radius:var(--r);
+  padding:13px 14px;color:var(--tx);font:500 15px/1 var(--sans);
+  outline:none;transition:border .14s;width:100%;
 }
-.inp:focus { border-color: var(--amber); }
-.inp::placeholder { color: var(--text2); }
-.inp-row { display: flex; gap: 10px; }
-.inp-row .field { flex: 1; min-width: 100px; }
-select.inp option { background: var(--bg2); }
+.inp:focus{border-color:var(--amber)}
+.inp::placeholder{color:var(--tx3)}
+select.inp option{background:var(--bg3)}
+.frow{display:flex;gap:10px;flex-wrap:wrap}
+.frow .fld{flex:1;min-width:110px}
 
-/* ── Buttons ── */
-.btn {
-  font-family: var(--display); font-size: 14px; font-weight: 600;
-  letter-spacing: .02em;
-  padding: 14px 22px;
-  border-radius: var(--r);
-  border: none; cursor: pointer;
-  transition: all .15s;
-  display: inline-flex; align-items: center; gap: 8px;
-  white-space: nowrap;
+/* ─── BUTTONS ────────────────────────────────────────────── */
+.btn{
+  font:700 13px/1 var(--sans);letter-spacing:.02em;
+  padding:13px 20px;border-radius:var(--r);border:none;cursor:pointer;
+  transition:all .14s;display:inline-flex;align-items:center;gap:7px;white-space:nowrap;
 }
-.btn-primary { background: var(--amber); color: #000; }
-.btn-primary:hover { background: #e89810; }
-.btn-primary:disabled { opacity: .35; cursor: not-allowed; }
-.btn-ghost { background: transparent; border: 1.5px solid var(--border2); color: var(--text2); }
-.btn-ghost:hover { border-color: var(--amber); color: var(--amber); }
-.btn-danger { background: var(--coral-bg); border: 1px solid rgba(255,107,107,.3); color: var(--coral); }
-.btn-teal { background: var(--teal-bg); border: 1px solid rgba(45,212,191,.3); color: var(--teal); }
-.btn-sm { padding: 8px 14px; font-size: 12px; }
-.btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+.btn-p{background:var(--amber);color:#000}
+.btn-p:hover{background:var(--amber2)}
+.btn-p:disabled{opacity:.35;cursor:not-allowed}
+.btn-g{background:transparent;border:1.5px solid var(--line2);color:var(--tx2)}
+.btn-g:hover{border-color:var(--amber);color:var(--amber)}
+.btn-d{background:var(--cbg);border:1px solid rgba(248,113,113,.3);color:var(--coral)}
+.btn-d:hover{background:rgba(248,113,113,.2)}
+.btn-t{background:var(--tbg);border:1px solid rgba(20,184,166,.3);color:var(--teal)}
+.btn-sm{padding:7px 12px;font-size:11px}
+.brow{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;align-items:center}
 
-/* ── Stats row ── */
-.stats-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
-.stat-card {
-  flex: 1; min-width: 120px;
-  background: var(--bg1);
-  border: 1px solid var(--border);
-  border-radius: var(--r2);
-  padding: 14px 16px;
-}
-.stat-label { font-family: var(--mono); font-size: 12px; color: var(--text2); text-transform: uppercase; letter-spacing: .08em; margin-bottom: 6px; font-weight: 500; }
-.stat-val { font-family: var(--mono); font-size: 24px; font-weight: 600; }
-.stat-card.owed .stat-label { color: var(--coral); } .stat-card.owed .stat-val { color: var(--coral); }
-.stat-card.paid .stat-label { color: var(--teal); } .stat-card.paid .stat-val { color: var(--teal); }
-.stat-card.earn .stat-label { color: var(--amber); } .stat-card.earn .stat-val { color: var(--amber); }
+/* ─── TIME CHIPS ─────────────────────────────────────────── */
+.tcs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+.tc{flex:1;min-width:100px;background:var(--bg3);border:1px solid var(--line2);border-radius:var(--r);padding:12px 13px}
+.tc-l{font:600 10px/1 var(--mono);text-transform:uppercase;letter-spacing:.1em;margin-bottom:5px}
+.tc-v{font:600 17px/1 var(--mono)}
+.tc.meet .tc-l,.tc.meet .tc-v{color:var(--blue)}
+.tc.abs .tc-l,.tc.abs .tc-v{color:var(--coral)}
+.tc.chg .tc-l,.tc.chg .tc-v{color:var(--teal)}
 
-/* ── Session rows ── */
-.session-card {
-  background: var(--bg1); border: 1px solid var(--border);
-  border-radius: var(--r2); margin-bottom: 10px; overflow: hidden;
-}
-.sess-hdr {
-  display: flex; justify-content: space-between; align-items: flex-start;
-  padding: 16px 18px; cursor: pointer; gap: 10px;
-}
-.sess-hdr:hover { background: var(--bg2); }
-.sess-subj { font-size: 16px; font-weight: 700; }
-.sess-meta { font-family: var(--mono); font-size: 12px; color: var(--text2); margin-top: 4px; }
-.sess-right { text-align: right; flex-shrink: 0; }
-.sess-total { font-family: var(--mono); font-size: 17px; font-weight: 500; color: var(--amber); }
-.prog-wrap { display: flex; align-items: center; gap: 6px; margin-top: 4px; justify-content: flex-end; }
-.prog { width: 60px; height: 4px; border-radius: 2px; background: var(--border); overflow: hidden; }
-.prog-fill { height: 100%; background: var(--teal); border-radius: 2px; transition: width .3s; }
-.prog-label { font-family: var(--mono); font-size: 10px; color: var(--text2); }
-.sess-body { padding: 12px 18px 16px; border-top: 1px solid var(--border); }
+/* ─── CHARGE BOX ─────────────────────────────────────────── */
+.cbox{background:var(--abg);border:1px solid rgba(245,158,11,.22);border-radius:var(--r);padding:13px 15px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.cbox.g{background:var(--tbg);border-color:rgba(20,184,166,.22)}
+.cbox-lbl{font:600 11px/1 var(--mono);text-transform:uppercase;letter-spacing:.1em;color:var(--amber)}
+.cbox.g .cbox-lbl{color:var(--teal)}
+.cbox-val{font:600 22px/1 var(--mono);color:var(--amber)}
+.cbox.g .cbox-val{color:var(--teal)}
+.cbox-sub{font:400 11px/1 var(--mono);color:var(--tx3);margin-top:3px}
 
-/* ── Student lines ── */
-.stu-line {
-  display: flex; align-items: center; gap: 10px;
-  padding: 10px 0;
-  border-bottom: 1px solid var(--border);
-  flex-wrap: wrap;
-}
-.stu-line:last-child { border-bottom: none; }
-.dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
-.dot.live { background: var(--teal); }
-.dot.passive { background: var(--purple); }
-.stu-name { font-size: 15px; font-weight: 600; flex: 1; min-width: 100px; }
-.badge {
-  font-family: var(--mono); font-size: 10px;
-  padding: 3px 8px; border-radius: 4px;
-  text-transform: uppercase; letter-spacing: .06em;
-}
-.badge-live { background: var(--teal-bg); color: var(--teal); }
-.badge-passive { background: var(--purple-bg); color: var(--purple); }
-.badge-paid { background: var(--teal-bg); color: var(--teal); }
-.badge-unpaid { background: var(--coral-bg); color: var(--coral); }
-.badge-subj { background: var(--amber-bg); color: var(--amber); }
-.stu-amt { font-family: var(--mono); font-size: 14px; font-weight: 500; color: var(--amber); white-space: nowrap; }
-.paid-toggle {
-  font-family: var(--mono); font-size: 11px;
-  padding: 5px 10px; border-radius: 5px; border: none; cursor: pointer;
-  transition: all .12s;
-}
-.paid-toggle.yes { background: var(--teal-bg); color: var(--teal); border: 1px solid rgba(45,212,191,.3); }
-.paid-toggle.no { background: var(--coral-bg); color: var(--coral); border: 1px solid rgba(255,107,107,.25); }
+/* ─── PASSIVE PANEL ──────────────────────────────────────── */
+.ppanel{background:var(--vbg);border:1px solid rgba(167,139,250,.2);border-radius:var(--r);padding:13px;margin-top:12px}
+.ppanel-t{font:600 11px/1 var(--mono);text-transform:uppercase;letter-spacing:.1em;color:var(--violet);margin-bottom:10px}
 
-/* ── Absence items ── */
-.abs-item {
-  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
-  padding: 8px 12px;
-  background: var(--coral-bg); border: 1px solid rgba(255,107,107,.15);
-  border-radius: 8px; margin-bottom: 6px;
-  font-family: var(--mono); font-size: 12px;
-}
-.abs-ts { color: var(--coral); font-weight: 500; }
+/* ─── DROPZONE ───────────────────────────────────────────── */
+.dz{border:2px dashed var(--line2);border-radius:var(--r2);padding:28px 18px;text-align:center;cursor:pointer;transition:all .18s;margin-bottom:12px;position:relative}
+.dz:hover,.dz.over{border-color:var(--amber);background:var(--abg)}
+.dz input{display:none}
+.dz-ic{font-size:36px;margin-bottom:8px}
+.dz-t{font-size:16px;font-weight:700;margin-bottom:5px}
+.dz-h{font:400 12px/1.4 var(--mono);color:var(--tx3)}
 
-/* ── Time chips ── */
-.time-chips { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
-.tc {
-  flex: 1; min-width: 110px;
-  background: var(--bg2); border: 1px solid var(--border);
-  border-radius: var(--r); padding: 12px 14px;
-}
-.tc-label { font-family: var(--mono); font-size: 10px; text-transform: uppercase; letter-spacing: .1em; margin-bottom: 5px; }
-.tc-val { font-family: var(--mono); font-size: 17px; font-weight: 500; }
-.tc.meet .tc-label { color: var(--blue); } .tc.meet .tc-val { color: var(--blue); }
-.tc.absent .tc-label { color: var(--coral); } .tc.absent .tc-val { color: var(--coral); }
-.tc.charge .tc-label { color: var(--teal); } .tc.charge .tc-val { color: var(--teal); }
+/* ─── MODAL ──────────────────────────────────────────────── */
+.mo{position:fixed;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;z-index:100;padding:14px;opacity:0;pointer-events:none;transition:opacity .2s}
+.mo.on{opacity:1;pointer-events:all}
+.md{background:var(--bg2);border:1px solid var(--line2);border-radius:var(--r3);width:100%;max-width:540px;max-height:92vh;overflow-y:auto;padding:22px;transform:translateY(14px);transition:transform .2s}
+.mo.on .md{transform:translateY(0)}
+.md-t{font-size:19px;font-weight:800;letter-spacing:-.02em;margin-bottom:18px;display:flex;justify-content:space-between;align-items:center}
+.md-x{background:transparent;border:none;color:var(--tx3);font-size:20px;cursor:pointer;padding:2px;line-height:1}
+.md-x:hover{color:var(--tx)}
 
-/* ── Passive panel ── */
-.passive-panel {
-  background: var(--purple-bg); border: 1px solid rgba(167,139,250,.2);
-  border-radius: var(--r); padding: 14px; margin-top: 12px;
-}
-.pp-title { font-family: var(--mono); font-size: 11px; color: var(--purple); text-transform: uppercase; letter-spacing: .1em; margin-bottom: 10px; }
+/* ─── EDIT INLINE ────────────────────────────────────────── */
+.ei{background:transparent;border:none;border-bottom:1.5px solid var(--line2);color:var(--tx);font:500 14px/1 var(--sans);outline:none;padding:3px 2px;cursor:pointer;transition:border .14s;min-width:60px}
+.ei:focus{border-color:var(--amber);background:var(--abg);border-radius:4px 4px 0 0;padding:3px 6px}
 
-/* ── Charge box ── */
-.charge-box {
-  background: var(--amber-bg); border: 1px solid rgba(245,166,35,.25);
-  border-radius: var(--r); padding: 14px 16px;
-  display: flex; justify-content: space-between; align-items: center;
-  flex-wrap: wrap; gap: 8px; margin-bottom: 14px;
-}
-.charge-box.green { background: var(--teal-bg); border-color: rgba(45,212,191,.25); }
-.cb-label { font-family: var(--mono); font-size: 11px; color: var(--amber); text-transform: uppercase; letter-spacing: .1em; }
-.charge-box.green .cb-label { color: var(--teal); }
-.cb-val { font-family: var(--mono); font-size: 22px; font-weight: 500; color: var(--amber); }
-.charge-box.green .cb-val { color: var(--teal); }
-.cb-sub { font-family: var(--mono); font-size: 11px; color: var(--text2); margin-top: 2px; }
+/* ─── SUBJECT CARD ───────────────────────────────────────── */
+.sjcard{background:var(--bg1);border:1px solid var(--line);border-radius:var(--r2);margin-bottom:10px;overflow:hidden}
+.sjcard-h{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;cursor:pointer}
+.sjcard-h:hover{background:var(--bg2)}
+.sjcard-name{font-size:17px;font-weight:800;letter-spacing:-.02em}
+.sjcard-total{font:600 16px/1 var(--mono);color:var(--amber)}
 
-/* ── Chevron ── */
-.chev { font-size: 14px; color: var(--text2); transition: transform .2s; flex-shrink: 0; }
-.chev.open { transform: rotate(180deg); }
+/* ─── SETUP ──────────────────────────────────────────────── */
+.setup{max-width:460px;margin:36px auto;padding:0 16px}
+.setup-t{font-size:28px;font-weight:800;letter-spacing:-.04em;margin-bottom:6px}
+.setup-s{font:400 12px/1.7 var(--mono);color:var(--tx3);margin-bottom:24px}
+.sql-box{background:var(--bg2);border:1px solid var(--line);border-radius:var(--r);padding:12px;font:400 10px/1.7 var(--mono);color:var(--tx3);max-height:180px;overflow-y:auto;white-space:pre-wrap;margin-bottom:20px}
 
-/* ── Divider ── */
-.divider { height: 1px; background: var(--border); margin: 14px 0; }
+/* ─── TOAST ──────────────────────────────────────────────── */
+.toast{position:fixed;bottom:72px;left:50%;transform:translateX(-50%);background:var(--bg3);border:1px solid var(--amber);border-radius:var(--r);padding:11px 18px;font:500 13px/1 var(--mono);color:var(--amber);white-space:nowrap;z-index:200;animation:tin .2s ease;box-shadow:0 8px 28px rgba(0,0,0,.5)}
+@keyframes tin{from{transform:translateX(-50%) translateY(10px);opacity:0}}
 
-/* ── Modal ── */
-.modal-overlay {
-  position: fixed; inset: 0;
-  background: rgba(0,0,0,.7); backdrop-filter: blur(4px);
-  display: flex; align-items: center; justify-content: center;
-  z-index: 100; padding: 16px;
-  opacity: 0; pointer-events: none; transition: opacity .2s;
-}
-.modal-overlay.open { opacity: 1; pointer-events: all; }
-.modal {
-  background: var(--bg1); border: 1px solid var(--border2);
-  border-radius: var(--r3);
-  width: 100%; max-width: 560px;
-  max-height: 90vh; overflow-y: auto;
-  padding: 24px;
-  transform: translateY(16px); transition: transform .2s;
-}
-.modal-overlay.open .modal { transform: translateY(0); }
-.modal-title { font-size: 20px; font-weight: 700; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
-.modal-close { background: transparent; border: none; color: var(--text2); font-size: 22px; cursor: pointer; padding: 4px; }
+/* ─── MISC ───────────────────────────────────────────────── */
+.chev{font-size:13px;color:var(--tx3);transition:transform .2s;flex-shrink:0}
+.chev.op{transform:rotate(180deg)}
+.divider{height:1px;background:var(--line);margin:12px 0}
+.sec-t{font:600 11px/1 var(--mono);text-transform:uppercase;letter-spacing:.12em;color:var(--amber);margin-bottom:8px;margin-top:10px}
+.empty{text-align:center;padding:44px 18px}
+.empty-ic{font-size:44px;margin-bottom:10px}
+.empty-tx{font:400 13px/1 var(--mono);color:var(--tx3)}
+.loading{text-align:center;padding:36px;font:400 13px/1 var(--mono);color:var(--tx3)}
+.row-act{display:flex;gap:6px;align-items:center}
 
-/* ── Toast ── */
-.toast {
-  position: fixed; bottom: calc(var(--tab-h) + 16px); left: 50%; transform: translateX(-50%);
-  background: var(--bg3); border: 1px solid var(--amber);
-  border-radius: var(--r); padding: 12px 20px;
-  font-family: var(--mono); font-size: 13px; color: var(--amber);
-  white-space: nowrap; z-index: 200;
-  animation: toastIn .2s ease;
-  box-shadow: 0 8px 32px rgba(0,0,0,.5);
-}
-@keyframes toastIn { from { transform: translateX(-50%) translateY(10px); opacity: 0; } }
-
-/* ── Empty state ── */
-.empty { text-align: center; padding: 48px 20px; }
-.empty-icon { font-size: 48px; margin-bottom: 12px; }
-.empty-text { font-family: var(--mono); font-size: 14px; color: var(--text2); }
-
-/* ── Loading ── */
-.loading { text-align: center; padding: 40px; font-family: var(--mono); font-size: 14px; color: var(--text2); }
-
-/* ── Edit/Delete controls ── */
-.row-actions { display: flex; gap: 6px; align-items: center; }
-.edit-inline {
-  background: transparent; border: none; border-bottom: 1px dashed var(--text2);
-  color: var(--text); font-family: var(--display); font-size: 15px; font-weight: 600;
-  outline: none; cursor: pointer; min-width: 80px;
-  transition: border-color .15s;
-}
-.edit-inline:focus { border-color: var(--amber); }
-
-/* ── Subject explorer (tab 4) ── */
-.subj-card { background: var(--bg1); border: 1px solid var(--border); border-radius: var(--r2); margin-bottom: 10px; overflow: hidden; }
-.subj-hdr { display: flex; justify-content: space-between; align-items: center; padding: 16px 18px; cursor: pointer; }
-.subj-hdr:hover { background: var(--bg2); }
-.subj-name { font-size: 17px; font-weight: 700; }
-.subj-total { font-family: var(--mono); font-size: 16px; color: var(--amber); font-weight: 500; }
-
-/* ── Setup screen ── */
-.setup-screen { max-width: 480px; margin: 40px auto; padding: 0 16px; }
-.setup-title { font-size: 28px; font-weight: 700; margin-bottom: 8px; }
-.setup-sub { font-family: var(--mono); font-size: 12px; color: var(--text2); margin-bottom: 28px; line-height: 1.6; }
-
-@media (max-width: 480px) {
-  .app-header { padding: 12px 14px 8px; }
-  .app-logo { font-size: 19px; }
-  .page { padding: 14px 12px 90px; }
-  .page-title { font-size: 22px; }
-  .stat-val { font-size: 17px; }
-  .modal { padding: 18px; }
-}
+@media(max-width:420px){.hdr{padding:12px 14px 10px}.logo{font-size:18px}.hnum-val{font-size:16px}.ptitle{font-size:20px}.pg{padding:14px 12px 80px}}
 </style>
 </head>
 <body>
 
-<!-- ══ CONFIG SETUP SCREEN (shown before Supabase is configured) ══ -->
-<div id="setup-screen" style="display:none;padding:20px">
-  <div class="setup-screen">
-    <div class="setup-title">TutorApp<span style="color:var(--amber)">.</span></div>
-    <div class="setup-sub">
-      One-time setup. Connect a free Supabase database so your data persists across all your devices.
-      <br/><br/>
-      <b>Steps:</b><br/>
-      1. Go to <a href="https://supabase.com" target="_blank" style="color:var(--amber)">supabase.com</a> → New project (free)<br/>
-      2. Project Settings → API → copy URL &amp; anon key<br/>
-      3. SQL Editor → New query → paste the schema below → Run<br/>
-      4. Come back here and enter your URL &amp; key
-    </div>
-
-    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:12px;margin-bottom:20px;font-family:var(--mono);font-size:11px;color:var(--text2);max-height:200px;overflow-y:auto;white-space:pre-wrap;line-height:1.6">-- RUN THIS IN SUPABASE SQL EDITOR:
-
-create table if not exists universities (id bigserial primary key, name text unique not null);
-create table if not exists departments (id bigserial primary key, university_id bigint references universities(id) on delete cascade, name text not null, unique(university_id,name));
-create table if not exists subjects (id bigserial primary key, department_id bigint references departments(id) on delete cascade, name text not null, term text, unique(department_id,name));
-create table if not exists students (id bigserial primary key, name text unique not null, email text, default_rate numeric default 0);
-create table if not exists sessions (id bigserial primary key, subject_id bigint references subjects(id) on delete cascade, date date not null, filename text, t_meeting_min numeric default 0, t_absent_min numeric default 0, t_charge_min numeric default 0, rate numeric default 0, total_worth numeric default 0, notes text, created_at timestamptz default now());
-create table if not exists session_students (id bigserial primary key, session_id bigint references sessions(id) on delete cascade, student_id bigint references students(id) on delete cascade, student_type text default 'live', amount numeric default 0, paid boolean default false, unique(session_id,student_id));
-create table if not exists absence_periods (id bigserial primary key, session_id bigint references sessions(id) on delete cascade, from_ts text, to_ts text, duration_min numeric, talkers text);
-create table if not exists name_mappings (id bigserial primary key, raw_identifier text unique not null, real_name text not null);
-create table if not exists rate_mappings (id bigserial primary key, student_id bigint references students(id) on delete cascade, subject_id bigint references subjects(id) on delete cascade, rate numeric not null, unique(student_id,subject_id));
-create table if not exists app_settings (key text primary key, value text not null);
+<!-- SETUP -->
+<div id="setup-screen" style="display:none;overflow-y:auto;height:100%">
+<div class="setup">
+  <div class="setup-t">Tutor<span style="color:var(--amber)">App</span></div>
+  <div class="setup-s">One-time setup. You need a free Supabase account to store your data across all devices.<br/><br/><b>Steps:</b><br/>1. <a href="https://supabase.com" target="_blank" style="color:var(--amber)">supabase.com</a> → New project (free)<br/>2. SQL Editor → New query → paste schema below → Run<br/>3. Project Settings → API → copy URL &amp; anon key<br/>4. Enter them below</div>
+  <div class="sql-box" id="sql-schema">-- RUN IN SUPABASE SQL EDITOR:
+create table if not exists universities(id bigserial primary key,name text unique not null);
+create table if not exists departments(id bigserial primary key,university_id bigint references universities(id) on delete cascade,name text not null,unique(university_id,name));
+create table if not exists subjects(id bigserial primary key,department_id bigint references departments(id) on delete cascade,name text not null,term text,unique(department_id,name));
+create table if not exists students(id bigserial primary key,name text unique not null,email text,default_rate numeric default 0);
+create table if not exists sessions(id bigserial primary key,subject_id bigint references subjects(id) on delete cascade,session_name text,date date not null,filename text,t_meeting_min numeric default 0,t_absent_min numeric default 0,t_charge_min numeric default 0,rate numeric default 0,total_worth numeric default 0,notes text,created_at timestamptz default now());
+create table if not exists session_students(id bigserial primary key,session_id bigint references sessions(id) on delete cascade,student_id bigint references students(id) on delete cascade,student_type text default 'live',amount numeric default 0,paid boolean default false,unique(session_id,student_id));
+create table if not exists absence_periods(id bigserial primary key,session_id bigint references sessions(id) on delete cascade,from_ts text,to_ts text,duration_min numeric,talkers text);
+create table if not exists name_mappings(id bigserial primary key,raw_identifier text unique not null,real_name text not null);
+create table if not exists rate_mappings(id bigserial primary key,student_id bigint references students(id) on delete cascade,subject_id bigint references subjects(id) on delete cascade,rate numeric not null,unique(student_id,subject_id));
+create table if not exists app_settings(key text primary key,value text not null);
 insert into app_settings(key,value) values('your_email','anas.abdelsamad@feng.bu.edu.eg'),('silence_threshold_sec','180') on conflict(key) do nothing;
-
--- Enable RLS but allow all for now (add auth later if needed)
-alter table universities enable row level security;
-alter table departments enable row level security;
-alter table subjects enable row level security;
-alter table students enable row level security;
-alter table sessions enable row level security;
-alter table session_students enable row level security;
-alter table absence_periods enable row level security;
-alter table name_mappings enable row level security;
-alter table rate_mappings enable row level security;
-alter table app_settings enable row level security;
-
-create policy "allow_all" on universities for all using (true) with check (true);
-create policy "allow_all" on departments for all using (true) with check (true);
-create policy "allow_all" on subjects for all using (true) with check (true);
-create policy "allow_all" on students for all using (true) with check (true);
-create policy "allow_all" on sessions for all using (true) with check (true);
-create policy "allow_all" on session_students for all using (true) with check (true);
-create policy "allow_all" on absence_periods for all using (true) with check (true);
-create policy "allow_all" on name_mappings for all using (true) with check (true);
-create policy "allow_all" on rate_mappings for all using (true) with check (true);
-create policy "allow_all" on app_settings for all using (true) with check (true);</div>
-
-    <div class="field"><label>Supabase Project URL</label>
-      <input class="inp" id="setup-url" placeholder="https://xxxx.supabase.co"/>
-    </div>
-    <div class="field"><label>Supabase Anon Key</label>
-      <input class="inp" id="setup-key" placeholder="eyJ..."/>
-    </div>
-    <div class="field"><label>Your Teams Email (used to identify you in VTT files)</label>
-      <input class="inp" id="setup-email" placeholder="you@university.edu"/>
-    </div>
-    <button class="btn btn-primary" onclick="saveSetup()" style="width:100%;justify-content:center">
-      ✓ Connect & Start
-    </button>
-    <div id="setup-error" style="color:var(--coral);font-family:var(--mono);font-size:12px;margin-top:10px;display:none"></div>
-  </div>
+alter table universities enable row level security;alter table departments enable row level security;alter table subjects enable row level security;alter table students enable row level security;alter table sessions enable row level security;alter table session_students enable row level security;alter table absence_periods enable row level security;alter table name_mappings enable row level security;alter table rate_mappings enable row level security;alter table app_settings enable row level security;
+create policy "all" on universities for all using(true) with check(true);
+create policy "all" on departments for all using(true) with check(true);
+create policy "all" on subjects for all using(true) with check(true);
+create policy "all" on students for all using(true) with check(true);
+create policy "all" on sessions for all using(true) with check(true);
+create policy "all" on session_students for all using(true) with check(true);
+create policy "all" on absence_periods for all using(true) with check(true);
+create policy "all" on name_mappings for all using(true) with check(true);
+create policy "all" on rate_mappings for all using(true) with check(true);
+create policy "all" on app_settings for all using(true) with check(true);</div>
+  <button class="btn btn-g btn-sm" onclick="navigator.clipboard.writeText(document.getElementById('sql-schema').textContent).then(()=>alert('Copied!'))" style="margin-bottom:14px;width:100%;justify-content:center">📋 Copy SQL Schema</button>
+  <div class="fld"><label>Supabase Project URL</label><input class="inp" id="su" placeholder="https://xxxx.supabase.co"/></div>
+  <div class="fld"><label>Supabase Anon Key</label><input class="inp" id="sk" placeholder="eyJ…"/></div>
+  <div class="fld"><label>Your Teams Email</label><input class="inp" id="se" placeholder="you@university.edu"/></div>
+  <button class="btn btn-p" onclick="saveSetup()" style="width:100%;justify-content:center;margin-top:4px">✓ Connect &amp; Start</button>
+  <div id="serr" style="color:var(--coral);font:400 12px/1.5 var(--mono);margin-top:10px;display:none"></div>
+</div>
 </div>
 
-<!-- ══ MAIN APP ══ -->
+<!-- MAIN APP -->
 <div id="app" style="display:none;flex-direction:column;height:100%">
 
-  <!-- Header -->
-  <div class="app-header">
-    <div class="app-logo">Tutor<span>App</span></div>
-    <div class="header-stats">
-      <div class="hstat owed">
-        <div class="hstat-label">Owed</div>
-        <div class="hstat-val" id="hdr-owed">—</div>
-      </div>
-      <div class="hstat paid">
-        <div class="hstat-label">Paid</div>
-        <div class="hstat-val" id="hdr-paid">—</div>
-      </div>
+  <div class="hdr">
+    <div class="logo">Tutor<span>App</span></div>
+    <div class="hdr-nums">
+      <div class="hnum owed"><div class="hnum-lbl">Owed</div><div class="hnum-val" id="hdr-owed">—</div></div>
+      <div class="hnum paid"><div class="hnum-lbl">Paid</div><div class="hnum-val" id="hdr-paid">—</div></div>
     </div>
   </div>
 
-  <!-- Tab bar -->
-  <div class="tab-bar">
-    <button class="tab-btn active" onclick="switchTab('entry')" id="tab-entry">
-      <span class="ticon">➕</span>Entry
-    </button>
-    <button class="tab-btn" onclick="switchTab('ledger')" id="tab-ledger">
-      <span class="ticon">📋</span>Ledger
-    </button>
-    <button class="tab-btn" onclick="switchTab('students')" id="tab-students">
-      <span class="ticon">👥</span>Students
-    </button>
-    <button class="tab-btn" onclick="switchTab('subjects')" id="tab-subjects">
-      <span class="ticon">📚</span>Subjects
-    </button>
-    <button class="tab-btn" onclick="switchTab('edit')" id="tab-edit">
-      <span class="ticon">✏️</span>Edit DB
-    </button>
-    <button class="tab-btn" onclick="switchTab('settings')" id="tab-settings">
-      <span class="ticon">⚙️</span>Settings
-    </button>
+  <div class="tabs">
+    <button class="tb on" onclick="goTab('entry')" id="tb-entry"><span class="ic">＋</span>Entry</button>
+    <button class="tb" onclick="goTab('ledger')" id="tb-ledger"><span class="ic">📋</span>Ledger</button>
+    <button class="tb" onclick="goTab('students')" id="tb-students"><span class="ic">👥</span>Students</button>
+    <button class="tb" onclick="goTab('subjects')" id="tb-subjects"><span class="ic">📚</span>Subjects</button>
+    <button class="tb" onclick="goTab('edit')" id="tb-edit"><span class="ic">✏️</span>Edit DB</button>
+    <button class="tb" onclick="goTab('settings')" id="tb-settings"><span class="ic">⚙️</span>Settings</button>
   </div>
 
-  <!-- ══ TAB: ENTRY ══ -->
-  <div class="page active" id="page-entry">
-    <div class="page-title">
-      Add Data
-      <button class="btn btn-ghost btn-sm" onclick="undoLast()">↩ Undo</button>
-    </div>
-
-    <div class="entry-grid">
-      <div class="entry-card" onclick="openModal('vtt-modal')" id="dz-card"
+  <!-- TAB: ENTRY -->
+  <div class="pg on" id="pg-entry">
+    <div class="ptitle">Add Data <button class="btn btn-g btn-sm" onclick="undoLast()">↩ Undo</button></div>
+    <div class="egrid">
+      <div class="ec" onclick="openMod('vtt-mod')" id="dz-card"
         ondragover="event.preventDefault();this.classList.add('over')"
-        ondragleave="this.classList.remove('over')"
-        ondrop="handleDrop(event)">
-        <div class="eicon">📄</div>
-        <div class="etitle">VTT Transcript</div>
-        <div class="esub">Drop Teams .vtt file or tap to browse</div>
+        ondragleave="this.classList.remove('over')" ondrop="handleDrop(event)">
+        <div class="ec-icon">📄</div><div class="ec-title">VTT Transcript</div>
+        <div class="ec-sub">Drop Teams .vtt or tap to browse</div>
       </div>
-      <div class="entry-card" onclick="openModal('excel-modal')">
-        <div class="eicon">📊</div>
-        <div class="etitle">Excel Import</div>
-        <div class="esub">Import .xlsx history sheet</div>
+      <div class="ec" onclick="openMod('excel-mod')">
+        <div class="ec-icon">📊</div><div class="ec-title">Excel Import</div>
+        <div class="ec-sub">Import .xlsx history</div>
       </div>
-      <div class="entry-card" onclick="openPassiveFlow()">
-        <div class="eicon">🎥</div>
-        <div class="etitle">Passive Student</div>
-        <div class="esub">Student asks for the recording</div>
+      <div class="ec" onclick="openPassiveFlow()">
+        <div class="ec-icon">🎥</div><div class="ec-title">Passive Student</div>
+        <div class="ec-sub">Asks for the recording</div>
       </div>
-      <div class="entry-card" onclick="openModal('manual-modal')">
-        <div class="eicon">✍️</div>
-        <div class="etitle">Manual Session</div>
-        <div class="esub">Enter session details by hand</div>
+      <div class="ec" onclick="openMod('manual-mod')">
+        <div class="ec-icon">✍️</div><div class="ec-title">Manual Session</div>
+        <div class="ec-sub">Enter details by hand</div>
       </div>
     </div>
-
     <div id="entry-recent"></div>
   </div>
 
-  <!-- ══ TAB: LEDGER ══ -->
-  <div class="page" id="page-ledger">
-    <div class="page-title">Ledger <span class="page-title-sub" id="ledger-count"></span></div>
-    <div class="stats-row">
-      <div class="stat-card owed"><div class="stat-label">Owed to you</div><div class="stat-val" id="l-owed">—</div></div>
-      <div class="stat-card paid"><div class="stat-label">Collected</div><div class="stat-val" id="l-paid">—</div></div>
-      <div class="stat-card earn"><div class="stat-label">Total earned</div><div class="stat-val" id="l-earn">—</div></div>
+  <!-- TAB: LEDGER -->
+  <div class="pg" id="pg-ledger">
+    <div class="ptitle">Ledger <span class="ptitle-sub" id="lcount"></span></div>
+    <div class="stats">
+      <div class="sc owed"><div class="sc-lbl">Owed to you</div><div class="sc-val" id="l-owed">—</div></div>
+      <div class="sc paid"><div class="sc-lbl">Collected</div><div class="sc-val" id="l-paid">—</div></div>
+      <div class="sc earn"><div class="sc-lbl">Total earned</div><div class="sc-val" id="l-earn">—</div></div>
     </div>
     <div id="ledger-list"><div class="loading">Loading…</div></div>
   </div>
 
-  <!-- ══ TAB: STUDENTS ══ -->
-  <div class="page" id="page-students">
-    <div class="page-title">Students</div>
+  <!-- TAB: STUDENTS -->
+  <div class="pg" id="pg-students">
+    <div class="ptitle">Students</div>
     <div id="students-list"><div class="loading">Loading…</div></div>
   </div>
 
-  <!-- ══ TAB: SUBJECTS ══ -->
-  <div class="page" id="page-subjects">
-    <div class="page-title">Subjects</div>
+  <!-- TAB: SUBJECTS -->
+  <div class="pg" id="pg-subjects">
+    <div class="ptitle">Subjects</div>
     <div id="subjects-list"><div class="loading">Loading…</div></div>
   </div>
 
-  <!-- ══ TAB: EDIT DB ══ -->
-  <div class="page" id="page-edit">
-    <div class="page-title">
-      Edit Database
-      <button class="btn btn-ghost btn-sm" onclick="undoLast()">↩ Undo</button>
+  <!-- TAB: EDIT DB -->
+  <div class="pg" id="pg-edit">
+    <div class="ptitle">Edit Database <button class="btn btn-g btn-sm" onclick="undoLast()">↩ Undo</button></div>
+    <div style="font:400 12px/1.6 var(--mono);color:var(--tx3);margin-bottom:14px">
+      Click any underlined value to edit it inline. Press Enter or click away to save. All changes reflect everywhere immediately.
     </div>
-    <div style="font-family:var(--mono);font-size:12px;color:var(--text2);margin-bottom:16px">
-      Click any value to edit inline. Use ✕ to delete. Changes reflect everywhere instantly.
-    </div>
-    <div class="field">
-      <label>Filter by type</label>
+    <div class="fld">
+      <label>Filter</label>
       <select class="inp" onchange="loadEditTab(this.value)" id="edit-filter">
-        <option value="sessions">Sessions</option>
-        <option value="students">Students</option>
-        <option value="subjects">Subjects</option>
-        <option value="name_mappings">Name Mappings</option>
+        <option value="sessions">Sessions (name, date, rate, times)</option>
+        <option value="absence">Absence Periods (from, to, duration, talkers)</option>
+        <option value="students">Students (name, email, rate)</option>
+        <option value="subjects">Subjects (name, term)</option>
+        <option value="name_mappings">Name Mappings (email → real name)</option>
       </select>
     </div>
     <div id="edit-list"><div class="loading">Loading…</div></div>
   </div>
 
-  <!-- ══ TAB: SETTINGS ══ -->
-  <div class="page" id="page-settings">
-    <div class="page-title">Settings</div>
-
+  <!-- TAB: SETTINGS -->
+  <div class="pg" id="pg-settings">
+    <div class="ptitle">Settings</div>
     <div class="card">
-      <div class="card-hdr" style="cursor:default"><span style="font-weight:700;font-size:16px">General</span></div>
-      <div class="card-body">
-        <div class="field"><label>Your Teams Email</label>
-          <input class="inp" id="s-email" placeholder="you@university.edu"/>
-        </div>
-        <div class="field"><label>Absence threshold (seconds) — gaps longer than this count as absence</label>
-          <input class="inp" id="s-threshold" type="number" placeholder="180"/>
-        </div>
-        <button class="btn btn-primary" onclick="saveSettings()">Save Settings</button>
+      <div class="card-h" style="cursor:default"><span style="font-size:16px;font-weight:700">General</span></div>
+      <div class="card-b">
+        <div class="fld"><label>Your Teams Email</label><input class="inp" id="s-email" placeholder="you@university.edu"/></div>
+        <div class="fld"><label>Absence threshold (seconds)</label><input class="inp" id="s-thresh" type="number" placeholder="180"/></div>
+        <button class="btn btn-p" onclick="saveSettings()">Save Settings</button>
       </div>
     </div>
-
     <div class="card">
-      <div class="card-hdr" style="cursor:default"><span style="font-weight:700;font-size:16px">Create Subject</span></div>
-      <div class="card-body">
-        <div class="inp-row">
-          <div class="field"><label>University</label><input class="inp" id="s-uni" placeholder="BNU"/></div>
-          <div class="field"><label>Department</label><input class="inp" id="s-dept" placeholder="Engineering"/></div>
+      <div class="card-h" style="cursor:default"><span style="font-size:16px;font-weight:700">Create Subject</span></div>
+      <div class="card-b">
+        <div class="frow">
+          <div class="fld"><label>University</label><input class="inp" id="s-uni" placeholder="BNU"/></div>
+          <div class="fld"><label>Department</label><input class="inp" id="s-dept" placeholder="Engineering"/></div>
         </div>
-        <div class="inp-row">
-          <div class="field"><label>Subject Name</label><input class="inp" id="s-subj" placeholder="Electronics 2"/></div>
-          <div class="field"><label>Term (optional)</label><input class="inp" id="s-term" placeholder="262"/></div>
+        <div class="frow">
+          <div class="fld"><label>Subject Name</label><input class="inp" id="s-subj" placeholder="Electronics 2"/></div>
+          <div class="fld"><label>Term (optional)</label><input class="inp" id="s-term" placeholder="262"/></div>
         </div>
-        <button class="btn btn-primary" onclick="createSubject()">+ Create Subject</button>
-        <div id="subj-list-sm" style="margin-top:12px;font-family:var(--mono);font-size:11px;color:var(--text2)"></div>
+        <button class="btn btn-p" onclick="createSubject()">+ Create Subject</button>
+        <div id="subj-list-sm" style="margin-top:10px;font:400 11px/1.7 var(--mono);color:var(--tx3)"></div>
       </div>
     </div>
-
     <div class="card">
-      <div class="card-hdr" style="cursor:default"><span style="font-weight:700;font-size:16px">Database Connection</span></div>
-      <div class="card-body">
-        <div style="font-family:var(--mono);font-size:12px;color:var(--text2);margin-bottom:12px">
-          Connected to Supabase. To change connection, clear local storage and reload.
-        </div>
-        <button class="btn btn-ghost btn-sm" onclick="if(confirm('Reset connection?')){localStorage.clear();location.reload()}">
-          Reset Connection
-        </button>
+      <div class="card-h" style="cursor:default"><span style="font-size:16px;font-weight:700">Database Connection</span></div>
+      <div class="card-b">
+        <div style="font:400 12px/1.6 var(--mono);color:var(--tx3);margin-bottom:12px">Connected to Supabase. To change connection, reset below.</div>
+        <button class="btn btn-d btn-sm" onclick="if(confirm('Reset connection? Your data stays safe in Supabase.')){localStorage.clear();location.reload()}">Reset Connection</button>
       </div>
     </div>
   </div>
@@ -644,1129 +455,976 @@ create policy "allow_all" on app_settings for all using (true) with check (true)
 <!-- ══ MODALS ══ -->
 
 <!-- VTT Modal -->
-<div class="modal-overlay" id="vtt-modal">
-  <div class="modal">
-    <div class="modal-title">Analyze VTT File <button class="modal-close" onclick="closeModal('vtt-modal')">✕</button></div>
-    <div class="dropzone" id="vtt-drop" onclick="document.getElementById('vtt-file').click()"
-      ondragover="event.preventDefault();this.classList.add('over')"
-      ondragleave="this.classList.remove('over')"
-      ondrop="handleVttDrop(event)">
-      <input type="file" id="vtt-file" accept=".vtt,.txt" style="display:none" onchange="handleVttFile(this.files[0])"/>
-      <div class="dz-icon">📄</div>
-      <div class="dz-title" id="vtt-drop-title">Drop .vtt file here or tap to browse</div>
-      <div class="dz-hint">Meeting_in__SubjectName__.vtt</div>
+<div class="mo" id="vtt-mod">
+<div class="md">
+  <div class="md-t">Analyze VTT File <button class="md-x" onclick="closeMod('vtt-mod')">✕</button></div>
+  <div class="dz" id="vtt-dz" onclick="document.getElementById('vtt-fi').click()"
+    ondragover="event.preventDefault();this.classList.add('over')"
+    ondragleave="this.classList.remove('over')" ondrop="handleVttDrop(event)">
+    <input type="file" id="vtt-fi" accept=".vtt,.txt" style="display:none" onchange="handleVttFile(this.files[0])"/>
+    <div class="dz-ic">📄</div>
+    <div class="dz-t" id="vtt-dz-t">Drop .vtt file here or tap to browse</div>
+    <div class="dz-h">Meeting_in__SubjectName__.vtt</div>
+  </div>
+  <div id="vtt-res" style="display:none">
+    <div class="tcs" id="vtt-tcs"></div>
+    <div id="vtt-abs"></div>
+    <div class="sec-t">Participants — map to real names</div>
+    <div id="vtt-parts"></div>
+    <div class="divider"></div>
+    <div class="frow">
+      <div class="fld"><label>Subject</label>
+        <select class="inp" id="vtt-subj"><option value="">Auto: detect from filename</option></select>
+      </div>
+      <div class="fld"><label>Date</label><input class="inp" type="date" id="vtt-date"/></div>
     </div>
-    <div id="vtt-result" style="display:none">
-      <div class="time-chips" id="vtt-time-chips"></div>
-      <div id="vtt-absences"></div>
-      <div style="margin-bottom:12px">
-        <div style="font-family:var(--mono);font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Participants — map emails to real names</div>
-        <div id="vtt-participants"></div>
+    <div class="frow">
+      <div class="fld"><label>Session Name</label><input class="inp" id="vtt-sess-name" placeholder="e.g. AI_01 (auto-filled)"/></div>
+      <div class="fld"><label>Rate (EGP/hr)</label><input class="inp" type="number" id="vtt-rate" placeholder="200" oninput="updateVttPreview()"/></div>
+    </div>
+    <div id="vtt-preview"></div>
+    <div class="ppanel">
+      <div class="ppanel-t">🎥 Passive Students (recording only)</div>
+      <div id="vtt-plist"></div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <input class="inp" id="vtt-pinp" placeholder="Student name…" onkeydown="if(event.key==='Enter')addVttPassive()" style="flex:1"/>
+        <button class="btn btn-g btn-sm" onclick="addVttPassive()">+ Add</button>
       </div>
-      <div class="divider"></div>
-      <div class="inp-row">
-        <div class="field"><label>Subject</label>
-          <select class="inp" id="vtt-subject-sel">
-            <option value="">Auto-detect from filename</option>
-          </select>
-        </div>
-        <div class="field"><label>Date</label><input class="inp" type="date" id="vtt-date"/></div>
-      </div>
-      <div class="inp-row">
-        <div class="field"><label>Rate (EGP/hr)</label><input class="inp" type="number" id="vtt-rate" placeholder="200"/></div>
-      </div>
-      <div id="vtt-charge-preview"></div>
-      <div class="passive-panel">
-        <div class="pp-title">🎥 Passive Students (recording only)</div>
-        <div id="vtt-passive-list"></div>
-        <div style="display:flex;gap:8px;margin-top:8px">
-          <input class="inp" id="vtt-passive-input" placeholder="Student name…" onkeydown="if(event.key==='Enter')addVttPassive()"/>
-          <button class="btn btn-ghost btn-sm" onclick="addVttPassive()">+ Add</button>
-        </div>
-      </div>
-      <div class="btn-row">
-        <button class="btn btn-primary" onclick="logVttSession()">✓ Log Session</button>
-        <button class="btn btn-ghost" onclick="closeModal('vtt-modal');resetVtt()">Cancel</button>
-      </div>
+    </div>
+    <div class="brow">
+      <button class="btn btn-p" onclick="logVttSession()">✓ Log Session</button>
+      <button class="btn btn-g" onclick="closeMod('vtt-mod');resetVtt()">Cancel</button>
     </div>
   </div>
+</div>
 </div>
 
 <!-- Manual Session Modal -->
-<div class="modal-overlay" id="manual-modal">
-  <div class="modal">
-    <div class="modal-title">New Manual Session <button class="modal-close" onclick="closeModal('manual-modal')">✕</button></div>
-    <div class="inp-row">
-      <div class="field"><label>Subject</label>
-        <select class="inp" id="m-subject"></select>
-      </div>
-      <div class="field"><label>Date</label><input class="inp" type="date" id="m-date"/></div>
-    </div>
-    <div class="inp-row">
-      <div class="field"><label>Duration (minutes)</label><input class="inp" type="number" id="m-duration" placeholder="120"/></div>
-      <div class="field"><label>Rate (EGP/hr)</label><input class="inp" type="number" id="m-rate" placeholder="200"/></div>
-    </div>
-    <div class="field"><label>Notes</label><input class="inp" id="m-notes" placeholder="Optional notes…"/></div>
-    <div style="font-family:var(--mono);font-size:12px;color:var(--text2);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px;margin-top:4px">Students</div>
-    <div id="m-students-list"></div>
-    <div style="display:flex;gap:8px;margin-bottom:14px">
-      <input class="inp" id="m-stu-input" placeholder="Student name…" onkeydown="if(event.key==='Enter')addManualStudent()"/>
-      <select class="inp" id="m-stu-type" style="width:120px;flex-shrink:0">
-        <option value="live">Live</option>
-        <option value="passive">Passive</option>
-      </select>
-      <button class="btn btn-ghost btn-sm" onclick="addManualStudent()">+ Add</button>
-    </div>
-    <div id="m-charge-preview"></div>
-    <div class="btn-row">
-      <button class="btn btn-primary" onclick="logManualSession()">✓ Log Session</button>
-      <button class="btn btn-ghost" onclick="closeModal('manual-modal')">Cancel</button>
-    </div>
+<div class="mo" id="manual-mod">
+<div class="md">
+  <div class="md-t">New Manual Session <button class="md-x" onclick="closeMod('manual-mod')">✕</button></div>
+  <div class="frow">
+    <div class="fld"><label>Subject</label><select class="inp" id="m-subj" onchange="autoFillManualName()"></select></div>
+    <div class="fld"><label>Session Name</label><input class="inp" id="m-sess-name" placeholder="e.g. AI_01 (auto)"/></div>
   </div>
+  <div class="frow">
+    <div class="fld"><label>Date</label><input class="inp" type="date" id="m-date"/></div>
+    <div class="fld"><label>Duration (min)</label><input class="inp" type="number" id="m-dur" placeholder="120"/></div>
+    <div class="fld"><label>Rate (EGP/hr)</label><input class="inp" type="number" id="m-rate" placeholder="200"/></div>
+  </div>
+  <div class="fld"><label>Notes</label><input class="inp" id="m-notes" placeholder="Optional…"/></div>
+  <div class="sec-t">Students</div>
+  <div id="m-stus"></div>
+  <div style="display:flex;gap:8px;margin-bottom:12px">
+    <input class="inp" id="m-stu-inp" placeholder="Student name…" onkeydown="if(event.key==='Enter')addManualStu()" style="flex:1"/>
+    <select class="inp" id="m-stu-type" style="width:110px;flex-shrink:0"><option value="live">Live</option><option value="passive">Passive</option></select>
+    <button class="btn btn-g btn-sm" onclick="addManualStu()">+ Add</button>
+  </div>
+  <div id="m-preview"></div>
+  <div class="brow">
+    <button class="btn btn-p" onclick="logManualSession()">✓ Log Session</button>
+    <button class="btn btn-g" onclick="closeMod('manual-mod')">Cancel</button>
+  </div>
+</div>
 </div>
 
 <!-- Passive Flow Modal -->
-<div class="modal-overlay" id="passive-modal">
-  <div class="modal">
-    <div class="modal-title" id="passive-title">Add Passive Student <button class="modal-close" onclick="closeModal('passive-modal')">✕</button></div>
-    <div id="passive-step-subject">
-      <div style="font-family:var(--mono);font-size:12px;color:var(--text2);margin-bottom:14px">Step 1: Choose subject</div>
-      <div id="passive-subject-list"></div>
-    </div>
-    <div id="passive-step-session" style="display:none">
-      <div style="font-family:var(--mono);font-size:12px;color:var(--text2);margin-bottom:14px">Step 2: Choose session</div>
-      <div id="passive-session-list"></div>
-      <button class="btn btn-ghost btn-sm" onclick="document.getElementById('passive-step-subject').style.display='';document.getElementById('passive-step-session').style.display='none'">← Back</button>
-    </div>
-    <div id="passive-step-name" style="display:none">
-      <div style="font-family:var(--mono);font-size:12px;color:var(--text2);margin-bottom:14px">Step 3: Student name</div>
-      <div class="field"><label>Student name</label>
-        <input class="inp" id="passive-name-input" placeholder="Student name…" onkeydown="if(event.key==='Enter')confirmPassive()"/>
-      </div>
-      <div class="field"><label>Amount (EGP) — auto-calculated, edit if needed</label>
-        <input class="inp" type="number" id="passive-amount-input"/>
-      </div>
-      <div class="btn-row">
-        <button class="btn btn-primary" onclick="confirmPassive()">✓ Add Student</button>
-        <button class="btn btn-ghost" onclick="document.getElementById('passive-step-session').style.display='';document.getElementById('passive-step-name').style.display='none'">← Back</button>
-      </div>
+<div class="mo" id="passive-mod">
+<div class="md">
+  <div class="md-t" id="pass-t">Add Passive Student <button class="md-x" onclick="closeMod('passive-mod')">✕</button></div>
+  <div id="pass-step-subj">
+    <div style="font:400 12px/1 var(--mono);color:var(--tx3);margin-bottom:12px">Step 1 — Choose subject</div>
+    <div id="pass-subj-list"></div>
+  </div>
+  <div id="pass-step-sess" style="display:none">
+    <div style="font:400 12px/1 var(--mono);color:var(--tx3);margin-bottom:12px">Step 2 — Choose session</div>
+    <div id="pass-sess-list"></div>
+    <button class="btn btn-g btn-sm" onclick="document.getElementById('pass-step-subj').style.display='';document.getElementById('pass-step-sess').style.display='none'" style="margin-top:8px">← Back</button>
+  </div>
+  <div id="pass-step-name" style="display:none">
+    <div style="font:400 12px/1 var(--mono);color:var(--tx3);margin-bottom:12px">Step 3 — Student name</div>
+    <div class="fld"><label>Student name</label><input class="inp" id="pass-name" placeholder="Name…" onkeydown="if(event.key==='Enter')confirmPassive()"/></div>
+    <div class="fld"><label>Amount (EGP)</label><input class="inp" type="number" id="pass-amt"/></div>
+    <div class="brow">
+      <button class="btn btn-p" onclick="confirmPassive()">✓ Add</button>
+      <button class="btn btn-g" onclick="document.getElementById('pass-step-sess').style.display='';document.getElementById('pass-step-name').style.display='none'">← Back</button>
     </div>
   </div>
+</div>
 </div>
 
 <!-- Excel Modal -->
-<div class="modal-overlay" id="excel-modal">
-  <div class="modal">
-    <div class="modal-title">Import Excel <button class="modal-close" onclick="closeModal('excel-modal')">✕</button></div>
-    <div style="font-family:var(--mono);font-size:12px;color:var(--text2);margin-bottom:16px;line-height:1.7">
-      Excel import processes your .xlsm file client-side using SheetJS.<br/>
-      It reads student names, session columns, and payment status (total paid column).
-    </div>
-    <div class="dropzone" onclick="document.getElementById('excel-file').click()"
-      ondragover="event.preventDefault();this.classList.add('over')"
-      ondragleave="this.classList.remove('over')"
-      ondrop="handleExcelDrop(event)">
-      <input type="file" id="excel-file" accept=".xlsx,.xlsm,.xls" style="display:none" onchange="handleExcelFile(this.files[0])"/>
-      <div class="dz-icon">📊</div>
-      <div class="dz-title" id="excel-drop-title">Drop Excel file or tap to browse</div>
-      <div class="dz-hint">.xlsx / .xlsm supported</div>
-    </div>
-    <div id="excel-result" style="display:none">
-      <div class="field"><label>Import into subject</label>
-        <select class="inp" id="excel-subject-sel"></select>
-      </div>
-      <div id="excel-preview" style="font-family:var(--mono);font-size:12px;color:var(--text2);margin-bottom:14px"></div>
-      <div class="btn-row">
-        <button class="btn btn-primary" onclick="doExcelImport()">✓ Import</button>
-        <button class="btn btn-ghost" onclick="closeModal('excel-modal')">Cancel</button>
-      </div>
+<div class="mo" id="excel-mod">
+<div class="md">
+  <div class="md-t">Import Excel <button class="md-x" onclick="closeMod('excel-mod')">✕</button></div>
+  <div style="font:400 12px/1.6 var(--mono);color:var(--tx3);margin-bottom:14px">Reads student names, session columns, and payment status from your .xlsm file.</div>
+  <div class="dz" onclick="document.getElementById('xl-fi').click()"
+    ondragover="event.preventDefault();this.classList.add('over')"
+    ondragleave="this.classList.remove('over')" ondrop="handleExcelDrop(event)">
+    <input type="file" id="xl-fi" accept=".xlsx,.xlsm,.xls" style="display:none" onchange="handleExcelFile(this.files[0])"/>
+    <div class="dz-ic">📊</div>
+    <div class="dz-t" id="xl-dz-t">Drop Excel file or tap to browse</div>
+    <div class="dz-h">.xlsx / .xlsm supported</div>
+  </div>
+  <div id="xl-res" style="display:none">
+    <div class="fld"><label>Import into subject</label><select class="inp" id="xl-subj"></select></div>
+    <div id="xl-preview" style="font:400 12px/1.6 var(--mono);color:var(--tx3);margin-bottom:12px"></div>
+    <div class="brow">
+      <button class="btn btn-p" onclick="doExcelImport()">✓ Import</button>
+      <button class="btn btn-g" onclick="closeMod('excel-mod')">Cancel</button>
     </div>
   </div>
 </div>
+</div>
 
-<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
 // ══════════════════════════════════════════════════════════════════════════════
-// CORE STATE
+// STATE
 // ══════════════════════════════════════════════════════════════════════════════
-let sb = null;           // Supabase client
-let YOUR_EMAIL = '';
-let SILENCE_THRESHOLD = 180;
-let undoStack = [];      // [{table, op, data}]
-let vttAnalysis = null;  // current parsed VTT
-let vttPassiveNames = [];
-let manualStudents = [];
-let passiveFlow = { subjectId: null, sessionId: null };
-let excelData = null;    // parsed excel rows
-let subjectsCache = [];
+let sb=null, YOUR_EMAIL='', SILENCE_THRESHOLD=180;
+let undoStack=[], vttAna=null, vttPassive=[], manualStus=[];
+let passiveFlow={}, excelData=null, subjectsCache=[];
 
 // ══════════════════════════════════════════════════════════════════════════════
-// SETUP
+// INIT / SETUP
 // ══════════════════════════════════════════════════════════════════════════════
-function init() {
-  const url = localStorage.getItem('sb_url');
-  const key = localStorage.getItem('sb_key');
-  YOUR_EMAIL = localStorage.getItem('your_email') || '';
-  if (!url || !key) {
-    document.getElementById('setup-screen').style.display = 'block';
-    return;
-  }
-  sb = supabase.createClient(url, key);
-  document.getElementById('app').style.display = 'flex';
+function init(){
+  const url=localStorage.getItem('sb_url'), key=localStorage.getItem('sb_key');
+  YOUR_EMAIL=localStorage.getItem('your_email')||'';
+  if(!url||!key){document.getElementById('setup-screen').style.display='block';return;}
+  sb=supabase.createClient(url,key);
+  document.getElementById('app').style.display='flex';
   loadAll();
 }
 
-async function saveSetup() {
-  const url = document.getElementById('setup-url').value.trim();
-  const key = document.getElementById('setup-key').value.trim();
-  const email = document.getElementById('setup-email').value.trim();
-  const err = document.getElementById('setup-error');
-  if (!url || !key) { err.textContent = 'URL and key are required'; err.style.display='block'; return; }
-  try {
-    const client = supabase.createClient(url, key);
-    const { error } = await client.from('app_settings').select('key').limit(1);
-    if (error) throw new Error(error.message);
-    localStorage.setItem('sb_url', url);
-    localStorage.setItem('sb_key', key);
-    localStorage.setItem('your_email', email);
-    if (email) await client.from('app_settings').upsert({key:'your_email',value:email});
+async function saveSetup(){
+  const url=document.getElementById('su').value.trim(), key=document.getElementById('sk').value.trim(), em=document.getElementById('se').value.trim();
+  const err=document.getElementById('serr');
+  if(!url||!key){err.textContent='URL and key required';err.style.display='block';return;}
+  try{
+    const cl=supabase.createClient(url,key);
+    const{error}=await cl.from('app_settings').select('key').limit(1);
+    if(error)throw new Error(error.message);
+    localStorage.setItem('sb_url',url);localStorage.setItem('sb_key',key);localStorage.setItem('your_email',em);
+    if(em)await cl.from('app_settings').upsert({key:'your_email',value:em});
     location.reload();
-  } catch(e) {
-    err.textContent = 'Connection failed: ' + e.message + ' — did you run the SQL schema?';
-    err.style.display = 'block';
-  }
+  }catch(e){err.textContent='Connection failed: '+e.message+' — did you run the SQL schema?';err.style.display='block';}
 }
 
-async function loadAll() {
-  // Load settings from DB
-  const { data: settings } = await sb.from('app_settings').select('*');
-  if (settings) {
-    settings.forEach(s => {
-      if (s.key === 'your_email') YOUR_EMAIL = s.value;
-      if (s.key === 'silence_threshold_sec') SILENCE_THRESHOLD = parseInt(s.value) || 180;
-    });
-  }
-  // Load subjects cache
-  await refreshSubjectsCache();
-  // Load each page
-  await Promise.all([
-    loadLedger(),
-    loadStudents(),
-    loadSubjectsTab(),
-    loadEditTab('sessions'),
-    loadSettings(),
-    loadHeaderStats(),
-  ]);
+async function loadAll(){
+  const{data:settings}=await sb.from('app_settings').select('*');
+  if(settings){settings.forEach(s=>{if(s.key==='your_email')YOUR_EMAIL=s.value;if(s.key==='silence_threshold_sec')SILENCE_THRESHOLD=parseInt(s.value)||180;});}
+  await refreshSubjects();
+  await Promise.all([loadLedger(),loadStudents(),loadSubjectsTab(),loadEditTab('sessions'),loadSettings(),loadHeaderStats()]);
 }
 
-async function refreshSubjectsCache() {
-  const { data } = await sb.from('subjects').select('id,name,term');
-  subjectsCache = data || [];
+async function refreshSubjects(){
+  const{data}=await sb.from('subjects').select('id,name,term');
+  subjectsCache=data||[];
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SESSION AUTO-NAMING
+// ══════════════════════════════════════════════════════════════════════════════
+async function nextSessionName(subjectId){
+  const subj=subjectsCache.find(s=>s.id===subjectId);
+  if(!subj)return'Session_01';
+  const prefix=subj.name.replace(/\s+/g,'_');
+  const{data}=await sb.from('sessions').select('session_name').eq('subject_id',subjectId).order('created_at',{ascending:true});
+  // Find highest number for this prefix
+  let max=0;
+  (data||[]).forEach(s=>{
+    if(s.session_name){
+      const m=s.session_name.match(new RegExp('^'+prefix.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'_(\\d+)$','i'));
+      if(m)max=Math.max(max,parseInt(m[1]));
+    }
+  });
+  return `${prefix}_${String(max+1).padStart(2,'0')}`;
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
 // TABS
 // ══════════════════════════════════════════════════════════════════════════════
-function switchTab(id) {
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById('page-' + id).classList.add('active');
-  document.getElementById('tab-' + id).classList.add('active');
-  if (id === 'ledger') loadLedger();
-  if (id === 'students') loadStudents();
-  if (id === 'subjects') loadSubjectsTab();
-  if (id === 'edit') loadEditTab(document.getElementById('edit-filter').value);
+function goTab(id){
+  document.querySelectorAll('.pg').forEach(p=>p.classList.remove('on'));
+  document.querySelectorAll('.tb').forEach(b=>b.classList.remove('on'));
+  document.getElementById('pg-'+id).classList.add('on');
+  document.getElementById('tb-'+id).classList.add('on');
+  if(id==='ledger')loadLedger();
+  if(id==='students')loadStudents();
+  if(id==='subjects')loadSubjectsTab();
+  if(id==='edit')loadEditTab(document.getElementById('edit-filter').value);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
 // HEADER STATS
 // ══════════════════════════════════════════════════════════════════════════════
-async function loadHeaderStats() {
-  const { data } = await sb.from('session_students').select('amount,paid');
-  if (!data) return;
-  const owed = data.filter(r => !r.paid).reduce((a,r) => a + (r.amount||0), 0);
-  const paid = data.filter(r => r.paid).reduce((a,r) => a + (r.amount||0), 0);
-  document.getElementById('hdr-owed').textContent = egp(owed);
-  document.getElementById('hdr-paid').textContent = egp(paid);
-  // Ledger stats
-  document.getElementById('l-owed').textContent = egp(owed);
-  document.getElementById('l-paid').textContent = egp(paid);
-  document.getElementById('l-earn').textContent = egp(owed + paid);
+async function loadHeaderStats(){
+  const{data}=await sb.from('session_students').select('amount,paid');
+  if(!data)return;
+  const owed=data.filter(r=>!r.paid).reduce((a,r)=>a+(r.amount||0),0);
+  const paid=data.filter(r=>r.paid).reduce((a,r)=>a+(r.amount||0),0);
+  document.getElementById('hdr-owed').textContent=egp(owed);
+  document.getElementById('hdr-paid').textContent=egp(paid);
+  document.getElementById('l-owed').textContent=egp(owed);
+  document.getElementById('l-paid').textContent=egp(paid);
+  document.getElementById('l-earn').textContent=egp(owed+paid);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// LEDGER TAB
+// LEDGER
 // ══════════════════════════════════════════════════════════════════════════════
-async function loadLedger() {
-  const el = document.getElementById('ledger-list');
-  el.innerHTML = '<div class="loading">Loading…</div>';
-  const { data: sessions } = await sb.from('sessions')
-    .select('*,subjects(name),session_students(*,students(name)),absence_periods(*)')
-    .order('date', { ascending: false });
-  if (!sessions || sessions.length === 0) {
-    el.innerHTML = '<div class="empty"><div class="empty-icon">📋</div><div class="empty-text">No sessions logged yet</div></div>';
-    document.getElementById('ledger-count').textContent = '';
-    return;
-  }
-  document.getElementById('ledger-count').textContent = `${sessions.length} sessions`;
-  el.innerHTML = sessions.map(s => renderSessionCard(s)).join('');
+async function loadLedger(){
+  const el=document.getElementById('ledger-list');
+  el.innerHTML='<div class="loading">Loading…</div>';
+  const{data}=await sb.from('sessions').select('*,subjects(name),session_students(*,students(name)),absence_periods(*)').order('date',{ascending:false});
+  if(!data?.length){el.innerHTML='<div class="empty"><div class="empty-ic">📋</div><div class="empty-tx">No sessions logged yet</div></div>';document.getElementById('lcount').textContent='';return;}
+  document.getElementById('lcount').textContent=`${data.length} sessions`;
+  el.innerHTML=data.map(s=>renderSessCard(s)).join('');
   await loadHeaderStats();
 }
 
-function renderSessionCard(s) {
-  const studs = s.session_students || [];
-  const total = studs.reduce((a,r) => a + (r.amount||0), 0);
-  const paidAmt = studs.filter(r => r.paid).reduce((a,r) => a + (r.amount||0), 0);
-  const pct = total > 0 ? Math.round(paidAmt/total*100) : 0;
-  const absences = s.absence_periods || [];
-  return `
-  <div class="session-card" id="sess-${s.id}">
-    <div class="sess-hdr" onclick="toggleSess(${s.id})">
-      <div>
-        <div class="sess-subj">
-          <span class="badge badge-subj" style="margin-right:6px">${esc(s.subjects?.name||'Unknown')}</span>
-          ${esc(s.subjects?.name||'Unknown')}
-        </div>
-        <div class="sess-meta">${s.date} · ${s.t_charge_min}m charged · ${s.rate} EGP/hr</div>
-      </div>
-      <div class="sess-right">
-        <div class="sess-total">${egp(total)}</div>
-        <div class="prog-wrap">
-          <div class="prog"><div class="prog-fill" style="width:${pct}%"></div></div>
-          <span class="prog-label">${pct}%</span>
-        </div>
-      </div>
-      <span class="chev" id="chev-${s.id}">▼</span>
+function renderSessCard(s){
+  const st=s.session_students||[], tot=st.reduce((a,r)=>a+(r.amount||0),0);
+  const paidAmt=st.filter(r=>r.paid).reduce((a,r)=>a+(r.amount||0),0);
+  const pc=tot>0?Math.round(paidAmt/tot*100):0;
+  const abs=s.absence_periods||[];
+  const nm=s.session_name||s.subjects?.name||'Session';
+  return`<div class="scard" id="sc-${s.id}">
+  <div class="scard-h" onclick="togSess(${s.id})">
+    <div style="flex:1;min-width:0">
+      <div class="scard-name">${esc(nm)}</div>
+      <div class="scard-subj">${esc(s.subjects?.name||'Unknown')}</div>
+      <div class="scard-meta">${s.date} · ${s.t_charge_min}m charged · ${s.rate} EGP/hr</div>
     </div>
-    <div class="sess-body" id="sbody-${s.id}" style="display:none">
-      ${studs.map(r => `
-      <div class="stu-line">
-        <div class="dot ${r.student_type||'live'}"></div>
-        <span class="stu-name">${esc(r.students?.name||'Unknown')}</span>
-        <span class="badge badge-${r.student_type||'live'}">${r.student_type||'live'}</span>
-        <span class="stu-amt">${egp(r.amount||0)}</span>
-        <button class="paid-toggle ${r.paid?'yes':'no'}" onclick="togglePaid(${r.id},${s.id})">
-          ${r.paid?'✓ Paid':'✕ Unpaid'}
-        </button>
+    <div>
+      <div class="scard-total">${egp(tot)}</div>
+      <div class="prog"><div class="pbar"><div class="pfill" style="width:${pc}%"></div></div><span class="plbl">${pc}%</span></div>
+    </div>
+    <span class="chev" id="chev-${s.id}">▼</span>
+  </div>
+  <div class="scard-body" id="sb-${s.id}" style="display:none">
+    ${st.map(r=>`<div class="sl">
+      <div class="dot ${r.student_type||'live'}"></div>
+      <span class="sname">${esc(r.students?.name||'Unknown')}</span>
+      <span class="badge b-${r.student_type||'live'}">${r.student_type||'live'}</span>
+      <input type="number" class="inp" style="width:90px;padding:7px 9px;font-size:13px" defaultvalue="${r.amount||0}" value="${r.amount||0}"
+        onblur="updStuAmt(${r.id},${s.id},this.value)" onkeydown="if(event.key==='Enter')this.blur()"/>
+      <span style="font:400 11px/1 var(--mono);color:var(--tx3)">EGP</span>
+      <button class="ptog ${r.paid?'yes':'no'}" onclick="togPaid(${r.id},${s.id})">${r.paid?'✓ Paid':'✕ Unpaid'}</button>
+    </div>`).join('')}
+    ${st.length===0?'<div style="font:400 12px/1 var(--mono);color:var(--tx3);padding:6px 0">No students.</div>':''}
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <input class="inp" id="addp-${s.id}" placeholder="Add passive student…" onkeydown="if(event.key==='Enter')addPassiveLedger(${s.id},${s.rate},${s.t_charge_min})" style="flex:1;padding:10px 12px;font-size:13px"/>
+      <button class="btn btn-g btn-sm" onclick="addPassiveLedger(${s.id},${s.rate},${s.t_charge_min})">+</button>
+    </div>
+    ${abs.length?`<div class="sec-t" style="margin-top:10px">Absence Periods</div>${abs.map(a=>`
+    <div class="abs"><span class="abs-ts">${a.from_ts}→${a.to_ts}</span><span style="color:var(--coral)">(${a.duration_min}m)</span>${a.talkers?`<span style="color:var(--tx3)">${esc(a.talkers)}</span>`:''}</div>`).join('')}`:''}
+    <div class="brow" style="margin-top:10px">
+      <button class="btn btn-d btn-sm" onclick="delSess(${s.id})">🗑 Delete</button>
+      <span style="font:400 11px/1 var(--mono);color:var(--tx3)">T_meet:${s.t_meeting_min}m T_abs:${s.t_absent_min}m</span>
+    </div>
+  </div>
+</div>`;
+}
+
+function togSess(id){
+  const b=document.getElementById('sb-'+id), c=document.getElementById('chev-'+id);
+  const op=b.style.display!=='none';
+  b.style.display=op?'none':'block';
+  c.classList.toggle('op',!op);
+}
+
+async function togPaid(ssId,sessId){
+  const{data}=await sb.from('session_students').select('paid').eq('id',ssId).single();
+  const nv=!data.paid;
+  await sb.from('session_students').update({paid:nv}).eq('id',ssId);
+  pushUndo({table:'session_students',op:'update',id:ssId,prev:{paid:data.paid}});
+  loadLedger(); toast(nv?'✓ Marked paid':'Marked unpaid');
+}
+
+async function updStuAmt(ssId,sessId,val){
+  await sb.from('session_students').update({amount:parseFloat(val)||0}).eq('id',ssId);
+  await recalcTotal(sessId); loadLedger(); toast('Amount updated ✓');
+}
+
+async function addPassiveLedger(sessId,rate,tCharge){
+  const inp=document.getElementById('addp-'+sessId);
+  const nm=inp.value.trim(); if(!nm){toast('Enter a name');return;}
+  const amt=Math.round((tCharge/60)*rate);
+  const stuId=await upsertStudent(nm);
+  const{data}=await sb.from('session_students').insert({session_id:sessId,student_id:stuId,student_type:'passive',amount:amt,paid:false}).select().single();
+  pushUndo({table:'session_students',op:'insert',id:data.id});
+  await recalcTotal(sessId); inp.value=''; loadLedger(); toast(`${nm} added ✓`);
+}
+
+async function delSess(id){
+  if(!confirm('Delete this session?'))return;
+  await sb.from('sessions').delete().eq('id',id);
+  loadLedger(); loadHeaderStats(); toast('Session deleted');
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// STUDENTS
+// ══════════════════════════════════════════════════════════════════════════════
+async function loadStudents(){
+  const el=document.getElementById('students-list');
+  el.innerHTML='<div class="loading">Loading…</div>';
+  const{data}=await sb.from('students').select(`id,name,email,session_students(id,amount,paid,student_type,sessions(id,date,session_name,subjects(name)))`).order('name');
+  if(!data?.length){el.innerHTML='<div class="empty"><div class="empty-ic">👥</div><div class="empty-tx">No students yet</div></div>';return;}
+  el.innerHTML=data.map(stu=>{
+    const rows=stu.session_students||[];
+    const owed=rows.filter(r=>!r.paid).reduce((a,r)=>a+(r.amount||0),0);
+    const paid=rows.filter(r=>r.paid).reduce((a,r)=>a+(r.amount||0),0);
+    return`<div class="scard">
+    <div class="scard-h" onclick="togSess('s${stu.id}')">
+      <div style="flex:1"><div class="scard-subj">${esc(stu.name)}</div>
+      <div class="scard-meta">${rows.length} session(s) · collected ${egp(paid)}</div></div>
+      <div>${owed>0?`<div class="scard-total" style="color:var(--coral)">${egp(owed)} owed</div>`:`<span class="badge b-paid">✓ Settled</span>`}</div>
+      <span class="chev" id="chev-s${stu.id}">▼</span>
+    </div>
+    <div class="scard-body" id="sb-s${stu.id}" style="display:none">
+      ${rows.map(r=>`<div class="sl">
+        <div class="dot ${r.student_type}"></div>
+        <span style="font:400 11px/1 var(--mono);flex:0 0 auto;color:var(--amber);margin-right:4px">${esc(r.sessions?.session_name||'')}</span>
+        <span style="font:400 12px/1 var(--mono);flex:1">${esc(r.sessions?.subjects?.name||'?')}</span>
+        <span style="font:400 11px/1 var(--mono);color:var(--tx3)">${r.sessions?.date||''}</span>
+        <span class="samt">${egp(r.amount||0)}</span>
+        <button class="ptog ${r.paid?'yes':'no'}" onclick="togPaidStu(${r.id},${stu.id})">${r.paid?'✓ Paid':'✕ Unpaid'}</button>
       </div>`).join('')}
-      ${studs.length === 0 ? '<div style="font-family:var(--mono);font-size:12px;color:var(--text2);padding:8px 0">No students in this session.</div>' : ''}
-      <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
-        <input class="inp" id="add-passive-${s.id}" placeholder="Add passive student…" onkeydown="if(event.key==='Enter')addPassiveToSession(${s.id},${s.rate},${s.t_charge_min})" style="font-size:13px;padding:10px 12px"/>
-        <button class="btn btn-ghost btn-sm" onclick="addPassiveToSession(${s.id},${s.rate},${s.t_charge_min})">+</button>
-      </div>
-      ${absences.length ? `<div style="margin-top:10px">${absences.map(a=>`
-        <div class="abs-item">
-          <span class="abs-ts">${a.from_ts} → ${a.to_ts}</span>
-          <span style="color:var(--coral)">(${a.duration_min}m)</span>
-          ${a.talkers?`<span style="color:var(--text2)">${esc(a.talkers)}</span>`:''}
-        </div>`).join('')}</div>` : ''}
-      <div class="btn-row">
-        <button class="btn btn-danger btn-sm" onclick="deleteSession(${s.id})">🗑 Delete</button>
-        <span style="font-family:var(--mono);font-size:11px;color:var(--text2)">
-          T_meet:${s.t_meeting_min}m · T_abs:${s.t_absent_min}m · T_chg:${s.t_charge_min}m
-        </span>
+      <div style="display:flex;justify-content:flex-end;gap:14px;margin-top:8px;font:400 12px/1 var(--mono)">
+        <span style="color:var(--tx3)">Total: <b style="color:var(--tx)">${egp(owed+paid)}</b></span>
+        <span style="color:var(--tx3)">Paid: <b style="color:var(--teal)">${egp(paid)}</b></span>
+        <span style="color:var(--tx3)">Owed: <b style="color:var(--coral)">${egp(owed)}</b></span>
       </div>
     </div>
   </div>`;
-}
-
-function toggleSess(id) {
-  const body = document.getElementById('sbody-' + id);
-  const chev = document.getElementById('chev-' + id);
-  const open = body.style.display !== 'none';
-  body.style.display = open ? 'none' : 'block';
-  chev.classList.toggle('open', !open);
-}
-
-async function togglePaid(ssId, sessId) {
-  const { data } = await sb.from('session_students').select('paid').eq('id', ssId).single();
-  const newVal = !data.paid;
-  await sb.from('session_students').update({ paid: newVal }).eq('id', ssId);
-  pushUndo({ table:'session_students', op:'update', id:ssId, prev:{paid:data.paid} });
-  loadLedger();
-  toast(newVal ? '✓ Marked as paid' : 'Marked as unpaid');
-}
-
-async function addPassiveToSession(sessId, rate, tCharge) {
-  const input = document.getElementById('add-passive-' + sessId);
-  const name = input.value.trim();
-  if (!name) { toast('Enter a name'); return; }
-  const amt = Math.round((tCharge/60)*rate);
-  const stuId = await upsertStudent(name);
-  const { data } = await sb.from('session_students').insert({ session_id:sessId, student_id:stuId, student_type:'passive', amount:amt, paid:false }).select().single();
-  pushUndo({ table:'session_students', op:'insert', id:data.id });
-  await recalcSessionTotal(sessId);
-  input.value = '';
-  loadLedger();
-  toast(`${name} added as passive ✓`);
-}
-
-async function deleteSession(id) {
-  if (!confirm('Delete this session?')) return;
-  await sb.from('sessions').delete().eq('id', id);
-  loadLedger(); loadHeaderStats();
-  toast('Session deleted');
-}
-
-// ══════════════════════════════════════════════════════════════════════════════
-// STUDENTS TAB
-// ══════════════════════════════════════════════════════════════════════════════
-async function loadStudents() {
-  const el = document.getElementById('students-list');
-  el.innerHTML = '<div class="loading">Loading…</div>';
-  const { data } = await sb.from('students').select(`
-    id, name, email,
-    session_students(id, amount, paid, student_type, sessions(id, date, subjects(name)))
-  `).order('name');
-  if (!data || data.length === 0) {
-    el.innerHTML = '<div class="empty"><div class="empty-icon">👥</div><div class="empty-text">No students yet</div></div>';
-    return;
-  }
-  el.innerHTML = data.map(stu => {
-    const rows = stu.session_students || [];
-    const owed = rows.filter(r=>!r.paid).reduce((a,r)=>a+(r.amount||0),0);
-    const paid = rows.filter(r=>r.paid).reduce((a,r)=>a+(r.amount||0),0);
-    return `
-    <div class="session-card">
-      <div class="sess-hdr" onclick="toggleSess('stu${stu.id}')">
-        <div>
-          <div class="sess-subj">${esc(stu.name)}</div>
-          <div class="sess-meta">${rows.length} session(s) · collected ${egp(paid)}</div>
-        </div>
-        <div class="sess-right">
-          ${owed > 0
-            ? `<div class="sess-total">${egp(owed)} owed</div>`
-            : `<span class="badge badge-paid">✓ Settled</span>`}
-        </div>
-        <span class="chev" id="chev-stu${stu.id}">▼</span>
-      </div>
-      <div class="sess-body" id="sbody-stu${stu.id}" style="display:none">
-        ${rows.map(r => `
-        <div class="stu-line">
-          <div class="dot ${r.student_type}"></div>
-          <span style="font-family:var(--mono);font-size:12px;flex:1">${esc(r.sessions?.subjects?.name||'?')}</span>
-          <span style="font-family:var(--mono);font-size:11px;color:var(--text2)">${r.sessions?.date||''}</span>
-          <span class="stu-amt">${egp(r.amount||0)}</span>
-          <button class="paid-toggle ${r.paid?'yes':'no'}" onclick="togglePaid(${r.id},0);loadStudents()">
-            ${r.paid?'✓ Paid':'✕ Unpaid'}
-          </button>
-        </div>`).join('')}
-        <div style="display:flex;justify-content:flex-end;gap:16px;margin-top:8px;font-family:var(--mono);font-size:12px">
-          <span style="color:var(--text2)">Total: <b style="color:var(--text)">${egp(owed+paid)}</b></span>
-          <span style="color:var(--text2)">Paid: <b style="color:var(--teal)">${egp(paid)}</b></span>
-          <span style="color:var(--text2)">Owed: <b style="color:var(--coral)">${egp(owed)}</b></span>
-        </div>
-      </div>
-    </div>`;
   }).join('');
 }
 
+async function togPaidStu(ssId,stuId){
+  const{data}=await sb.from('session_students').select('paid').eq('id',ssId).single();
+  await sb.from('session_students').update({paid:!data.paid}).eq('id',ssId);
+  loadStudents(); loadHeaderStats(); toast('Updated ✓');
+}
+
 // ══════════════════════════════════════════════════════════════════════════════
-// SUBJECTS TAB
+// SUBJECTS
 // ══════════════════════════════════════════════════════════════════════════════
-async function loadSubjectsTab() {
-  const el = document.getElementById('subjects-list');
-  el.innerHTML = '<div class="loading">Loading…</div>';
-  const { data } = await sb.from('subjects').select(`
-    id, name, term,
-    sessions(id, date, rate, t_charge_min, total_worth,
-      session_students(id, amount, student_type, student_id, students(name)))
-  `).order('name');
-  if (!data || data.length === 0) {
-    el.innerHTML = '<div class="empty"><div class="empty-icon">📚</div><div class="empty-text">No subjects yet — create one in Settings</div></div>';
-    return;
-  }
-  el.innerHTML = data.map(subj => {
-    const sessions = subj.sessions || [];
-    const total = sessions.reduce((a,s)=>a+(s.total_worth||0),0);
-    return `
-    <div class="subj-card">
-      <div class="subj-hdr" onclick="toggleSess('subj${subj.id}')">
-        <div>
-          <div class="subj-name">${esc(subj.name)} ${subj.term?`<span style="font-family:var(--mono);font-size:11px;color:var(--text2)">(${esc(subj.term)})</span>`:''}
+async function loadSubjectsTab(){
+  const el=document.getElementById('subjects-list');
+  el.innerHTML='<div class="loading">Loading…</div>';
+  const{data}=await sb.from('subjects').select(`id,name,term,sessions(id,date,rate,t_charge_min,total_worth,session_name,session_students(id,amount,student_type,student_id,students(name)))`).order('name');
+  if(!data?.length){el.innerHTML='<div class="empty"><div class="empty-ic">📚</div><div class="empty-tx">No subjects yet — create one in Settings</div></div>';return;}
+  el.innerHTML=data.map(subj=>{
+    const sess=subj.sessions||[], tot=sess.reduce((a,s)=>a+(s.total_worth||0),0);
+    return`<div class="sjcard">
+    <div class="sjcard-h" onclick="togSess('sj${subj.id}')">
+      <div><div class="sjcard-name">${esc(subj.name)}${subj.term?` <span style="font:400 12px/1 var(--mono);color:var(--tx3)">(${esc(subj.term)})</span>`:''}</div>
+      <div style="font:400 12px/1 var(--mono);color:var(--tx3);margin-top:4px">${sess.length} session(s)</div></div>
+      <div style="display:flex;align-items:center;gap:10px"><span class="sjcard-total">${egp(tot)}</span><span class="chev" id="chev-sj${subj.id}">▼</span></div>
+    </div>
+    <div style="display:none" id="sb-sj${subj.id}">
+      <div style="padding:12px 16px">
+      ${sess.map(s=>{
+        const studs=s.session_students||[];
+        return`<div style="background:var(--bg2);border:1px solid var(--line);border-radius:var(--r);margin-bottom:8px;overflow:hidden">
+          <div style="padding:11px 14px;cursor:pointer;display:flex;justify-content:space-between;align-items:center" onclick="togSess('ss${s.id}')">
+            <div>
+              <div style="font:600 13px/1 var(--mono);color:var(--amber);margin-bottom:3px">${esc(s.session_name||'Session')}</div>
+              <div style="font:400 12px/1 var(--mono);color:var(--tx3)">${s.date} · ${s.t_charge_min}m · ${s.rate} EGP/hr</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font:600 14px/1 var(--mono);color:var(--amber)">${egp(s.total_worth||0)}</span>
+              <span class="chev" id="chev-ss${s.id}">▼</span>
+            </div>
           </div>
-          <div style="font-family:var(--mono);font-size:12px;color:var(--text2);margin-top:3px">${sessions.length} session(s)</div>
-        </div>
-        <div style="display:flex;align-items:center;gap:10px">
-          <span class="subj-total">${egp(total)}</span>
-          <span class="chev" id="chev-subj${subj.id}">▼</span>
-        </div>
+          <div style="display:none;padding:8px 14px 12px;border-top:1px solid var(--line)" id="sb-ss${s.id}">
+            ${studs.map(r=>`<div class="sl"><div class="dot ${r.student_type}"></div><span class="sname">${esc(r.students?.name||'Unknown')}</span><span class="badge b-${r.student_type}">${r.student_type}</span><span class="samt">${egp(r.amount||0)}</span></div>`).join('')}
+            <div style="font:500 12px/1 var(--mono);color:var(--amber);text-align:right;margin-top:6px">Total: ${egp(s.total_worth||0)}</div>
+          </div>
+        </div>`;
+      }).join('')}
+      <div style="font:600 13px/1 var(--mono);color:var(--amber);text-align:right;padding:6px 0">Subject total: ${egp(tot)}</div>
       </div>
-      <div style="display:none" id="sbody-subj${subj.id}">
-        <div style="padding:12px 18px">
-        ${sessions.map(sess => {
-          const studs = sess.session_students || [];
-          return `
-          <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);margin-bottom:8px;overflow:hidden">
-            <div style="padding:12px 14px;cursor:pointer;display:flex;justify-content:space-between;align-items:center" onclick="toggleSess('si${sess.id}')">
-              <div>
-                <div style="font-weight:600;font-size:14px">${sess.date}</div>
-                <div style="font-family:var(--mono);font-size:11px;color:var(--text2)">${sess.t_charge_min}m · ${sess.rate} EGP/hr</div>
-              </div>
-              <div style="display:flex;align-items:center;gap:8px">
-                <span style="font-family:var(--mono);font-size:14px;color:var(--amber);font-weight:500">${egp(sess.total_worth||0)}</span>
-                <span class="chev" id="chev-si${sess.id}">▼</span>
-              </div>
-            </div>
-            <div style="display:none;padding:8px 14px 12px;border-top:1px solid var(--border)" id="sbody-si${sess.id}">
-              ${studs.map(r=>`
-              <div class="stu-line">
-                <div class="dot ${r.student_type}"></div>
-                <span class="stu-name">${esc(r.students?.name||'Unknown')}</span>
-                <span class="badge badge-${r.student_type}">${r.student_type}</span>
-                <span class="stu-amt">${egp(r.amount||0)}</span>
-              </div>`).join('')}
-              <div style="font-family:var(--mono);font-size:12px;color:var(--amber);text-align:right;margin-top:6px">
-                Session total: ${egp(sess.total_worth||0)}
-              </div>
-            </div>
-          </div>`;
-        }).join('')}
-        <div style="font-family:var(--mono);font-size:13px;color:var(--amber);font-weight:500;text-align:right;padding:8px 0">
-          Subject total: ${egp(total)}
-        </div>
-        </div>
-      </div>
-    </div>`;
+    </div>
+  </div>`;
   }).join('');
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// EDIT DB TAB
+// EDIT DB — FULL INLINE EDITING
 // ══════════════════════════════════════════════════════════════════════════════
-async function loadEditTab(type) {
-  const el = document.getElementById('edit-list');
-  el.innerHTML = '<div class="loading">Loading…</div>';
+async function loadEditTab(type){
+  const el=document.getElementById('edit-list');
+  el.innerHTML='<div class="loading">Loading…</div>';
 
-  if (type === 'sessions') {
-    const { data } = await sb.from('sessions').select('*,subjects(name)').order('date',{ascending:false});
-    if (!data?.length) { el.innerHTML = '<div class="empty"><div class="empty-text">No sessions</div></div>'; return; }
-    el.innerHTML = data.map(s => `
+  if(type==='sessions'){
+    const{data}=await sb.from('sessions').select('*,subjects(name)').order('date',{ascending:false});
+    if(!data?.length){el.innerHTML='<div class="empty"><div class="empty-tx">No sessions</div></div>';return;}
+    el.innerHTML=data.map(s=>`
     <div class="card" style="margin-bottom:8px">
-      <div class="card-body" style="padding:12px 14px">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap">
-          <div style="flex:1">
-            <div style="font-weight:700;font-size:14px;margin-bottom:4px">
-              <span class="badge badge-subj" style="margin-right:6px">${esc(s.subjects?.name||'?')}</span>
-              ${s.date}
-            </div>
-            <div style="font-family:var(--mono);font-size:11px;color:var(--text2)">
-              T_charge:${s.t_charge_min}m · Rate:${s.rate} · Total:${egp(s.total_worth||0)}
-            </div>
+      <div class="card-b" style="padding:12px 14px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+          <div>
+            <div style="font:600 13px/1 var(--mono);color:var(--amber);margin-bottom:4px">${esc(s.subjects?.name||'?')}</div>
+            <div style="font:600 15px/1 var(--sans)">${s.date}</div>
           </div>
-          <div class="row-actions">
-            <button class="btn btn-ghost btn-sm" onclick="editSession(${s.id})">✏️ Edit</button>
-            <button class="btn btn-danger btn-sm" onclick="deleteSession(${s.id});loadEditTab('sessions')">🗑</button>
+          <button class="btn btn-d btn-sm" onclick="delRow('sessions',${s.id});loadEditTab('sessions')">🗑 Delete</button>
+        </div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;row-gap:10px">
+          <div class="fld" style="margin:0;min-width:130px">
+            <label>Session Name</label>
+            <input class="ei" value="${esc(s.session_name||'')}" placeholder="AI_01" onblur="updField('sessions','session_name',this.value,${s.id});loadEditTab('sessions')" onkeydown="if(event.key==='Enter')this.blur()" style="width:100%"/>
+          </div>
+          <div class="fld" style="margin:0;min-width:120px">
+            <label>Date</label>
+            <input class="ei" type="date" value="${s.date||''}" onblur="updField('sessions','date',this.value,${s.id});loadEditTab('sessions')" style="width:100%"/>
+          </div>
+          <div class="fld" style="margin:0;min-width:90px">
+            <label>Rate (EGP/hr)</label>
+            <input class="ei" type="number" value="${s.rate||0}" onblur="updField('sessions','rate',this.value,${s.id});loadEditTab('sessions')" onkeydown="if(event.key==='Enter')this.blur()" style="width:80px"/>
+          </div>
+          <div class="fld" style="margin:0;min-width:80px">
+            <label>T_meeting (min)</label>
+            <input class="ei" type="number" value="${s.t_meeting_min||0}" onblur="updField('sessions','t_meeting_min',this.value,${s.id});loadEditTab('sessions')" onkeydown="if(event.key==='Enter')this.blur()" style="width:70px"/>
+          </div>
+          <div class="fld" style="margin:0;min-width:80px">
+            <label>T_absent (min)</label>
+            <input class="ei" type="number" value="${s.t_absent_min||0}" onblur="updField('sessions','t_absent_min',this.value,${s.id});loadEditTab('sessions')" onkeydown="if(event.key==='Enter')this.blur()" style="width:70px"/>
+          </div>
+          <div class="fld" style="margin:0;min-width:80px">
+            <label>T_charge (min)</label>
+            <input class="ei" type="number" value="${s.t_charge_min||0}" onblur="updField('sessions','t_charge_min',this.value,${s.id});loadEditTab('sessions')" onkeydown="if(event.key==='Enter')this.blur()" style="width:70px"/>
+          </div>
+          <div class="fld" style="margin:0;min-width:180px">
+            <label>Notes</label>
+            <input class="ei" value="${esc(s.notes||'')}" placeholder="Notes…" onblur="updField('sessions','notes',this.value,${s.id})" onkeydown="if(event.key==='Enter')this.blur()" style="width:100%"/>
           </div>
         </div>
       </div>
     </div>`).join('');
   }
 
-  if (type === 'students') {
-    const { data } = await sb.from('students').select('*').order('name');
-    if (!data?.length) { el.innerHTML = '<div class="empty"><div class="empty-text">No students</div></div>'; return; }
-    el.innerHTML = data.map(s => `
-    <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--bg1);border:1px solid var(--border);border-radius:var(--r);margin-bottom:6px;flex-wrap:wrap">
-      <input class="edit-inline" value="${esc(s.name)}" onblur="updateField('students','name',this.value,${s.id})" style="flex:1;min-width:120px"/>
-      <input class="edit-inline" value="${esc(s.email||'')}" placeholder="email" onblur="updateField('students','email',this.value,${s.id})" style="flex:1;min-width:120px;font-size:12px;color:var(--text2)"/>
-      <input class="edit-inline" type="number" value="${s.default_rate||0}" onblur="updateField('students','default_rate',this.value,${s.id})" style="width:70px;text-align:right"/>
-      <span style="font-family:var(--mono);font-size:11px;color:var(--text2)">EGP/hr</span>
-      <button class="btn btn-danger btn-sm" onclick="deleteRow('students',${s.id});loadEditTab('students')">🗑</button>
+  if(type==='absence'){
+    const{data}=await sb.from('absence_periods').select('*,sessions(session_name,date,subjects(name))').order('session_id');
+    if(!data?.length){el.innerHTML='<div class="empty"><div class="empty-tx">No absence periods</div></div>';return;}
+    el.innerHTML=data.map(a=>`
+    <div style="background:var(--bg1);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;margin-bottom:8px">
+      <div style="font:600 13px/1 var(--mono);color:var(--amber);margin-bottom:8px">${esc(a.sessions?.session_name||'?')} — ${esc(a.sessions?.subjects?.name||'?')} — ${a.sessions?.date||''}</div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;row-gap:10px;align-items:flex-end">
+        <div class="fld" style="margin:0;min-width:100px"><label>From (HH:MM:SS)</label>
+          <input class="ei" value="${esc(a.from_ts||'')}" onblur="updField('absence_periods','from_ts',this.value,${a.id})" onkeydown="if(event.key==='Enter')this.blur()" style="width:100px"/></div>
+        <div class="fld" style="margin:0;min-width:100px"><label>To (HH:MM:SS)</label>
+          <input class="ei" value="${esc(a.to_ts||'')}" onblur="updField('absence_periods','to_ts',this.value,${a.id})" onkeydown="if(event.key==='Enter')this.blur()" style="width:100px"/></div>
+        <div class="fld" style="margin:0;min-width:80px"><label>Duration (min)</label>
+          <input class="ei" type="number" value="${a.duration_min||0}" onblur="updField('absence_periods','duration_min',this.value,${a.id})" onkeydown="if(event.key==='Enter')this.blur()" style="width:70px"/></div>
+        <div class="fld" style="margin:0;flex:1;min-width:140px"><label>Talkers</label>
+          <input class="ei" value="${esc(a.talkers||'')}" placeholder="names…" onblur="updField('absence_periods','talkers',this.value,${a.id})" onkeydown="if(event.key==='Enter')this.blur()" style="width:100%"/></div>
+        <button class="btn btn-d btn-sm" onclick="delRow('absence_periods',${a.id});loadEditTab('absence')">🗑</button>
+      </div>
     </div>`).join('');
   }
 
-  if (type === 'subjects') {
-    const { data } = await sb.from('subjects').select('*').order('name');
-    if (!data?.length) { el.innerHTML = '<div class="empty"><div class="empty-text">No subjects</div></div>'; return; }
-    el.innerHTML = data.map(s => `
-    <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--bg1);border:1px solid var(--border);border-radius:var(--r);margin-bottom:6px;flex-wrap:wrap">
-      <input class="edit-inline" value="${esc(s.name)}" onblur="updateField('subjects','name',this.value,${s.id})" style="flex:1;min-width:120px"/>
-      <input class="edit-inline" value="${esc(s.term||'')}" placeholder="term" onblur="updateField('subjects','term',this.value,${s.id})" style="width:70px;font-size:12px;color:var(--text2)"/>
-      <button class="btn btn-danger btn-sm" onclick="deleteRow('subjects',${s.id});loadEditTab('subjects')">🗑</button>
+  if(type==='students'){
+    const{data}=await sb.from('students').select('*').order('name');
+    if(!data?.length){el.innerHTML='<div class="empty"><div class="empty-tx">No students</div></div>';return;}
+    el.innerHTML=data.map(s=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--bg1);border:1px solid var(--line);border-radius:var(--r);margin-bottom:6px;flex-wrap:wrap">
+      <input class="ei" value="${esc(s.name)}" onblur="updField('students','name',this.value,${s.id})" onkeydown="if(event.key==='Enter')this.blur()" style="flex:1;min-width:120px"/>
+      <input class="ei" value="${esc(s.email||'')}" placeholder="email" onblur="updField('students','email',this.value,${s.id})" onkeydown="if(event.key==='Enter')this.blur()" style="flex:1;min-width:120px"/>
+      <input class="ei" type="number" value="${s.default_rate||0}" onblur="updField('students','default_rate',this.value,${s.id})" onkeydown="if(event.key==='Enter')this.blur()" style="width:70px;text-align:right"/>
+      <span style="font:400 11px/1 var(--mono);color:var(--tx3)">EGP/hr</span>
+      <button class="btn btn-d btn-sm" onclick="delRow('students',${s.id});loadEditTab('students')">🗑</button>
     </div>`).join('');
   }
 
-  if (type === 'name_mappings') {
-    const { data } = await sb.from('name_mappings').select('*').order('raw_identifier');
-    if (!data?.length) { el.innerHTML = '<div class="empty"><div class="empty-text">No name mappings yet</div></div>'; return; }
-    el.innerHTML = data.map(m => `
-    <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--bg1);border:1px solid var(--border);border-radius:var(--r);margin-bottom:6px;flex-wrap:wrap">
-      <span style="font-family:var(--mono);font-size:12px;color:var(--text2);flex:1;min-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(m.raw_identifier)}">${esc(m.raw_identifier)}</span>
-      <span style="color:var(--text2);font-size:14px">→</span>
-      <input class="edit-inline" value="${esc(m.real_name)}" onblur="updateField('name_mappings','real_name',this.value,${m.id})" style="flex:1;min-width:120px"/>
-      <button class="btn btn-danger btn-sm" onclick="deleteRow('name_mappings',${m.id});loadEditTab('name_mappings')">🗑</button>
+  if(type==='subjects'){
+    const{data}=await sb.from('subjects').select('*').order('name');
+    if(!data?.length){el.innerHTML='<div class="empty"><div class="empty-tx">No subjects</div></div>';return;}
+    el.innerHTML=data.map(s=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--bg1);border:1px solid var(--line);border-radius:var(--r);margin-bottom:6px;flex-wrap:wrap">
+      <input class="ei" value="${esc(s.name)}" onblur="updField('subjects','name',this.value,${s.id})" onkeydown="if(event.key==='Enter')this.blur()" style="flex:1;min-width:120px"/>
+      <input class="ei" value="${esc(s.term||'')}" placeholder="term e.g. 262" onblur="updField('subjects','term',this.value,${s.id})" onkeydown="if(event.key==='Enter')this.blur()" style="width:100px"/>
+      <button class="btn btn-d btn-sm" onclick="delRow('subjects',${s.id});loadEditTab('subjects')">🗑</button>
+    </div>`).join('');
+  }
+
+  if(type==='name_mappings'){
+    const{data}=await sb.from('name_mappings').select('*').order('raw_identifier');
+    if(!data?.length){el.innerHTML='<div class="empty"><div class="empty-tx">No name mappings yet</div></div>';return;}
+    el.innerHTML=data.map(m=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--bg1);border:1px solid var(--line);border-radius:var(--r);margin-bottom:6px;flex-wrap:wrap">
+      <span style="font:400 11px/1 var(--mono);color:var(--tx3);flex:1;min-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(m.raw_identifier)}">${esc(m.raw_identifier)}</span>
+      <span style="color:var(--tx3)">→</span>
+      <input class="ei" value="${esc(m.real_name)}" onblur="updField('name_mappings','real_name',this.value,${m.id})" onkeydown="if(event.key==='Enter')this.blur()" style="flex:1;min-width:120px"/>
+      <button class="btn btn-d btn-sm" onclick="delRow('name_mappings',${m.id});loadEditTab('name_mappings')">🗑</button>
     </div>`).join('');
   }
 }
 
-async function updateField(table, field, value, id) {
-  const obj = {}; obj[field] = value;
-  await sb.from(table).update(obj).eq('id', id);
-  toast('Updated ✓');
-  if (table === 'subjects') { await refreshSubjectsCache(); loadSubjectsTab(); }
-  if (table === 'students') loadStudents();
+async function updField(table,field,value,id){
+  const obj={}; obj[field]=value;
+  await sb.from(table).update(obj).eq('id',id);
+  toast('Saved ✓');
+  if(table==='subjects'){await refreshSubjects();loadSubjectsTab();}
+  if(table==='students')loadStudents();
   loadHeaderStats();
 }
 
-async function deleteRow(table, id) {
-  if (!confirm('Delete this entry?')) return;
-  await sb.from(table).delete().eq('id', id);
+async function delRow(table,id){
+  if(!confirm('Delete this entry?'))return;
+  await sb.from(table).delete().eq('id',id);
   toast('Deleted');
-  loadLedger(); loadStudents(); loadSubjectsTab(); loadHeaderStats();
-}
-
-function editSession(id) {
-  // Open manual modal pre-populated
-  toast('Edit session: open Ledger tab, expand the session, and edit student amounts there.');
+  loadLedger();loadStudents();loadSubjectsTab();loadHeaderStats();
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
 // SETTINGS
 // ══════════════════════════════════════════════════════════════════════════════
-async function loadSettings() {
-  document.getElementById('s-email').value = YOUR_EMAIL;
-  document.getElementById('s-threshold').value = SILENCE_THRESHOLD;
-  const { data } = await sb.from('subjects').select('id,name').order('name');
-  if (data) document.getElementById('subj-list-sm').textContent = 'Subjects: ' + data.map(s=>s.name).join(', ');
+async function loadSettings(){
+  document.getElementById('s-email').value=YOUR_EMAIL;
+  document.getElementById('s-thresh').value=SILENCE_THRESHOLD;
+  const{data}=await sb.from('subjects').select('id,name').order('name');
+  if(data)document.getElementById('subj-list-sm').textContent='Subjects: '+data.map(s=>s.name).join(', ');
 }
 
-async function saveSettings() {
-  const email = document.getElementById('s-email').value.trim();
-  const thresh = document.getElementById('s-threshold').value;
-  await sb.from('app_settings').upsert([{key:'your_email',value:email},{key:'silence_threshold_sec',value:thresh}]);
-  YOUR_EMAIL = email;
-  SILENCE_THRESHOLD = parseInt(thresh)||180;
-  localStorage.setItem('your_email', email);
+async function saveSettings(){
+  const em=document.getElementById('s-email').value.trim(), th=document.getElementById('s-thresh').value;
+  await sb.from('app_settings').upsert([{key:'your_email',value:em},{key:'silence_threshold_sec',value:th}]);
+  YOUR_EMAIL=em; SILENCE_THRESHOLD=parseInt(th)||180;
+  localStorage.setItem('your_email',em);
   toast('Settings saved ✓');
 }
 
-async function createSubject() {
-  const uni = document.getElementById('s-uni').value.trim();
-  const dept = document.getElementById('s-dept').value.trim();
-  const subj = document.getElementById('s-subj').value.trim();
-  const term = document.getElementById('s-term').value.trim();
-  if (!uni || !dept || !subj) { toast('University, department and subject are required'); return; }
-  const { data: uniData } = await sb.from('universities').upsert({name:uni},{onConflict:'name'}).select().single();
-  const uniId = uniData?.id || (await sb.from('universities').select('id').eq('name',uni).single()).data.id;
-  const { data: deptData } = await sb.from('departments').upsert({university_id:uniId,name:dept},{onConflict:'university_id,name'}).select().single();
-  const deptId = deptData?.id || (await sb.from('departments').select('id').eq('university_id',uniId).eq('name',dept).single()).data.id;
-  await sb.from('subjects').upsert({department_id:deptId,name:subj,term:term||null},{onConflict:'department_id,name'});
-  await refreshSubjectsCache();
-  loadSettings();
+async function createSubject(){
+  const uni=document.getElementById('s-uni').value.trim(), dept=document.getElementById('s-dept').value.trim();
+  const subj=document.getElementById('s-subj').value.trim(), term=document.getElementById('s-term').value.trim();
+  if(!uni||!dept||!subj){toast('University, department and subject required');return;}
+  const{data:ud}=await sb.from('universities').upsert({name:uni},{onConflict:'name'}).select().single();
+  const uId=ud?.id||(await sb.from('universities').select('id').eq('name',uni).single()).data.id;
+  const{data:dd}=await sb.from('departments').upsert({university_id:uId,name:dept},{onConflict:'university_id,name'}).select().single();
+  const dId=dd?.id||(await sb.from('departments').select('id').eq('university_id',uId).eq('name',dept).single()).data.id;
+  await sb.from('subjects').upsert({department_id:dId,name:subj,term:term||null},{onConflict:'department_id,name'});
+  await refreshSubjects(); loadSettings();
   toast(`Subject "${subj}" created ✓`);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
 // VTT PROCESSING
 // ══════════════════════════════════════════════════════════════════════════════
-function handleDrop(e) {
-  e.preventDefault();
-  document.getElementById('dz-card').classList.remove('over');
-  const file = e.dataTransfer.files[0];
-  if (file) { openModal('vtt-modal'); setTimeout(()=>handleVttFile(file),100); }
+function handleDrop(e){
+  e.preventDefault(); document.getElementById('dz-card').classList.remove('over');
+  const f=e.dataTransfer.files[0]; if(f){openMod('vtt-mod');setTimeout(()=>handleVttFile(f),100);}
 }
-function handleVttDrop(e) {
-  e.preventDefault();
-  document.getElementById('vtt-drop').classList.remove('over');
-  handleVttFile(e.dataTransfer.files[0]);
-}
-function extractDateFromVtt(text, filename, file) {
-  // 1. Try Teams filename pattern: "...2024-05-14..." or "...14 May 2024..."
-  const fnDateMatch = filename.match(/(\d{4})[-_\.](\d{2})[-_\.](\d{2})/);
-  if (fnDateMatch) return `${fnDateMatch[1]}-${fnDateMatch[2]}-${fnDateMatch[3]}`;
-  // 2. Try inside VTT content for NOTE lines with date
-  const noteMatch = text.match(/NOTE.*?(\d{4}[-\/]\d{2}[-\/]\d{2})/i);
-  if (noteMatch) return noteMatch[1].replace(/\//g,'-');
-  // 3. Fall back to file's last modified date (most reliable for Teams downloads)
-  if (file && file.lastModified) {
-    const d = new Date(file.lastModified);
-    return d.toISOString().slice(0,10);
-  }
+function handleVttDrop(e){e.preventDefault();document.getElementById('vtt-dz').classList.remove('over');handleVttFile(e.dataTransfer.files[0]);}
+
+function extractDateFromFile(text,filename,file){
+  const fm=filename.match(/(\d{4})[-_](\d{2})[-_](\d{2})/);
+  if(fm)return`${fm[1]}-${fm[2]}-${fm[3]}`;
+  const nm=text.match(/NOTE.*?(\d{4}[-\/]\d{2}[-\/]\d{2})/i);
+  if(nm)return nm[1].replace(/\//g,'-');
+  if(file?.lastModified)return new Date(file.lastModified).toISOString().slice(0,10);
   return new Date().toISOString().slice(0,10);
 }
 
-async function handleVttFile(file) {
-  if (!file) return;
-  document.getElementById('vtt-drop-title').textContent = `Processing: ${file.name}…`;
-  const text = await file.text();
-  const fn = file.name;
-  const subjectName = subjectFromFilename(fn);
-  const detectedDate = extractDateFromVtt(text, fn, file);
-  const events = parseVTT(text);
-  const analysis = analyseVTT(events, YOUR_EMAIL, SILENCE_THRESHOLD);
-  vttAnalysis = { ...analysis, subjectName, filename: fn, detectedDate };
-  vttPassiveNames = [];
-  renderVttResult();
-  document.getElementById('vtt-drop-title').textContent = `✓ Loaded: ${fn}`;
+async function handleVttFile(file){
+  if(!file)return;
+  document.getElementById('vtt-dz-t').textContent=`Processing: ${file.name}…`;
+  const text=await file.text(), fn=file.name;
+  const det=extractDateFromFile(text,fn,file);
+  const evs=parseVTT(text);
+  const ana=analyseVTT(evs,YOUR_EMAIL,SILENCE_THRESHOLD);
+  const sn=subjFromFn(fn);
+  vttAna={...ana,subjName:sn,filename:fn,detectedDate:det};
+  vttPassive=[];
+  await renderVttRes();
+  document.getElementById('vtt-dz-t').textContent=`✓ Loaded: ${fn}`;
 }
-function handleExcelDrop(e) { e.preventDefault(); handleExcelFile(e.dataTransfer.files[0]); }
 
-function subjectFromFilename(fn) {
-  const m = fn.match(/Meeting[_ ]+in[_ ]+__?([^_\.]+?)__?(?:\.vtt)?$/i) ||
-            fn.match(/Meeting[_ ]+in[_ ]+(.+?)\.vtt$/i);
-  if (m) return m[1].replace(/_/g,' ').trim();
+function subjFromFn(fn){
+  const m=fn.match(/Meeting[_ ]+in[_ ]+__?([^_\.]+?)__?(?:\.vtt)?$/i)||fn.match(/Meeting[_ ]+in[_ ]+(.+?)\.vtt$/i);
+  if(m)return m[1].replace(/_/g,' ').trim();
   return fn.replace(/\.vtt$/i,'').replace(/Meeting[_ ]+in[_ ]*/i,'').replace(/__/g,'').trim();
 }
 
-function tsToSec(ts) {
-  const [h,m,s] = ts.split(':');
-  return +h*3600 + +m*60 + parseFloat(s);
-}
-function secToTs(s) {
-  return `${String(Math.floor(s/3600)).padStart(2,'0')}:${String(Math.floor(s%3600/60)).padStart(2,'0')}:${String(Math.floor(s%60)).padStart(2,'0')}`;
-}
-function fmtMin(m) {
-  const h=Math.floor(m/60), min=Math.round(m%60);
-  return h>0?`${h}h ${min}m`:`${min}m`;
+function tsToSec(ts){const[h,m,s]=ts.split(':');return+h*3600 + +m*60+parseFloat(s);}
+function secToTs(s){return`${String(Math.floor(s/3600)).padStart(2,'0')}:${String(Math.floor(s%3600/60)).padStart(2,'0')}:${String(Math.floor(s%60)).padStart(2,'0')}`;}
+function fmtM(m){const h=Math.floor(m/60),mn=Math.round(m%60);return h>0?`${h}h ${mn}m`:`${mn}m`;}
+
+function parseVTT(text){
+  const re=/(\d{2}:\d{2}:\d{2}[.,]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[.,]\d{3})[\r\n]+(?:<v\s+([^>]+)>)?/g;
+  const ev=[];let m;
+  while((m=re.exec(text))!==null){const s=tsToSec(m[1].replace(',','.')),e=tsToSec(m[2].replace(',','.'));if(s<e)ev.push({start:s,end:e,speaker:m[3]||'unknown'});}
+  ev.sort((a,b)=>a.start-b.start);return ev;
 }
 
-function parseVTT(text) {
-  const re = /(\d{2}:\d{2}:\d{2}[.,]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[.,]\d{3})[\r\n]+(?:<v\s+([^>]+)>)?/g;
-  const ev = []; let m;
-  while ((m=re.exec(text))!==null) {
-    const s=tsToSec(m[1].replace(',','.')), e=tsToSec(m[2].replace(',','.'));
-    if (s<e) ev.push({start:s,end:e,speaker:m[3]||'unknown'});
-  }
-  ev.sort((a,b)=>a.start-b.start);
-  return ev;
+function analyseVTT(events,yourEmail,thr){
+  if(!events.length)return null;
+  const first=events[0].start,last=Math.max(...events.map(e=>e.end)),Tm=last-first;
+  const parts=[...new Set(events.filter(e=>e.speaker!==yourEmail&&e.speaker!=='unknown').map(e=>e.speaker))];
+  const yr=events.filter(e=>e.speaker===yourEmail).map(e=>[e.start,e.end]).sort((a,b)=>a[0]-b[0]);
+  const mg=[];for(const[s,e]of yr){if(mg.length&&s<=mg[mg.length-1][1]+5)mg[mg.length-1][1]=Math.max(mg[mg.length-1][1],e);else mg.push([s,e]);}
+  const abs=[];let prev=first;
+  for(const[ys,ye]of mg){const g=ys-prev;if(g>thr){const tlk=[...new Set(events.filter(e=>e.start>=prev&&e.end<=ys&&e.speaker!==yourEmail&&e.speaker!=='unknown').map(e=>e.speaker))];abs.push({from:prev,to:ys,dur:g,fromTs:secToTs(prev),toTs:secToTs(ys),durMin:+(g/60).toFixed(1),talkers:tlk});}prev=ye;}
+  const fg=last-prev;if(fg>thr){const tlk=[...new Set(events.filter(e=>e.start>=prev&&e.speaker!==yourEmail&&e.speaker!=='unknown').map(e=>e.speaker))];abs.push({from:prev,to:last,dur:fg,fromTs:secToTs(prev),toTs:secToTs(last),durMin:+(fg/60).toFixed(1),talkers:tlk});}
+  const Ta=abs.reduce((a,p)=>a+p.dur,0),Tc=Tm-Ta;
+  return{T_meeting:Tm,T_absent:Ta,T_charge:Tc,T_meeting_min:+(Tm/60).toFixed(1),T_absent_min:+(Ta/60).toFixed(1),T_charge_min:+(Tc/60).toFixed(1),absentPeriods:abs,participants:parts};
 }
 
-function analyseVTT(events, yourEmail, threshold) {
-  if (!events.length) return null;
-  const first=events[0].start, last=Math.max(...events.map(e=>e.end));
-  const T_meeting=last-first;
-  const participants=[...new Set(events.filter(e=>e.speaker!==yourEmail&&e.speaker!=='unknown').map(e=>e.speaker))];
-  const yourRaw=events.filter(e=>e.speaker===yourEmail).map(e=>[e.start,e.end]).sort((a,b)=>a[0]-b[0]);
-  const merged=[]; for(const [s,e] of yourRaw){if(merged.length&&s<=merged[merged.length-1][1]+5)merged[merged.length-1][1]=Math.max(merged[merged.length-1][1],e);else merged.push([s,e]);}
-  const absent=[]; let prev=first;
-  for(const [ys,ye] of merged){const gap=ys-prev;if(gap>threshold){const tlk=[...new Set(events.filter(e=>e.start>=prev&&e.end<=ys&&e.speaker!==yourEmail&&e.speaker!=='unknown').map(e=>e.speaker))];absent.push({from:prev,to:ys,dur:gap,fromTs:secToTs(prev),toTs:secToTs(ys),durMin:+(gap/60).toFixed(1),talkers:tlk});}prev=ye;}
-  const fg=last-prev;if(fg>threshold){const tlk=[...new Set(events.filter(e=>e.start>=prev&&e.speaker!==yourEmail&&e.speaker!=='unknown').map(e=>e.speaker))];absent.push({from:prev,to:last,dur:fg,fromTs:secToTs(prev),toTs:secToTs(last),durMin:+(fg/60).toFixed(1),talkers:tlk});}
-  const T_absent=absent.reduce((a,p)=>a+p.dur,0);
-  const T_charge=T_meeting-T_absent;
-  return {T_meeting,T_absent,T_charge,T_meeting_min:+(T_meeting/60).toFixed(1),T_absent_min:+(T_absent/60).toFixed(1),T_charge_min:+(T_charge/60).toFixed(1),absentPeriods:absent,participants};
-}
-
-async function renderVttResult() {
-  const a = vttAnalysis;
-  document.getElementById('vtt-result').style.display = 'block';
-  // Time chips
-  document.getElementById('vtt-time-chips').innerHTML = `
-    <div class="tc meet"><div class="tc-label">T_Meeting</div><div class="tc-val">${fmtMin(a.T_meeting_min)}</div></div>
-    <div class="tc absent"><div class="tc-label">T_Absent</div><div class="tc-val">${a.T_absent_min>0?fmtMin(a.T_absent_min):'—'}</div></div>
-    <div class="tc charge"><div class="tc-label">T_Charge</div><div class="tc-val">${fmtMin(a.T_charge_min)}</div></div>`;
-  // Absences
-  document.getElementById('vtt-absences').innerHTML = a.absentPeriods.length ? a.absentPeriods.map(p=>`
-    <div class="abs-item">
-      <span class="abs-ts">${p.fromTs} → ${p.toTs}</span>
-      <span style="color:var(--coral)">(${p.durMin}m)</span>
-      ${p.talkers.length?`<span style="color:var(--text2)">${p.talkers.map(resolveNameLocal).join(', ')}</span>`:''}
-    </div>`).join('') : '';
-  // Participants
-  const nmData = (await sb.from('name_mappings').select('*')).data || [];
-  const nmMap = {}; nmData.forEach(n=>nmMap[n.raw_identifier]=n.real_name);
-  document.getElementById('vtt-participants').innerHTML = a.participants.length ? a.participants.map(raw=>`
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
+async function renderVttRes(){
+  const a=vttAna;
+  document.getElementById('vtt-res').style.display='block';
+  document.getElementById('vtt-tcs').innerHTML=`
+    <div class="tc meet"><div class="tc-l">T_Meeting</div><div class="tc-v">${fmtM(a.T_meeting_min)}</div></div>
+    <div class="tc abs"><div class="tc-l">T_Absent</div><div class="tc-v">${a.T_absent_min>0?fmtM(a.T_absent_min):'—'}</div></div>
+    <div class="tc chg"><div class="tc-l">T_Charge</div><div class="tc-v">${fmtM(a.T_charge_min)}</div></div>`;
+  document.getElementById('vtt-abs').innerHTML=a.absentPeriods.length?a.absentPeriods.map(p=>`
+    <div class="abs"><span class="abs-ts">${p.fromTs}→${p.toTs}</span><span style="color:var(--coral)">(${p.durMin}m)</span>${p.talkers.length?`<span style="color:var(--tx3)">${p.talkers.join(', ')}</span>`:''}</div>`).join(''):'';
+  const nm=(await sb.from('name_mappings').select('*')).data||[];
+  const nmMap={};nm.forEach(n=>nmMap[n.raw_identifier]=n.real_name);
+  document.getElementById('vtt-parts').innerHTML=a.participants.length?a.participants.map(raw=>`
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
       <div class="dot live"></div>
-      <span style="font-family:var(--mono);font-size:11px;color:var(--text2);flex:0 0 150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(raw)}">${esc(raw)}</span>
-      <span style="color:var(--text2);font-size:18px">→</span>
+      <span style="font:400 11px/1 var(--mono);color:var(--tx3);flex:0 0 140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(raw)}">${esc(raw)}</span>
+      <span style="color:var(--tx3)">→</span>
       <input class="inp" data-raw="${esc(raw)}" value="${esc(nmMap[raw]||raw)}" placeholder="Real name…"
         onblur="if(this.value&&this.value!==this.dataset.raw)sb.from('name_mappings').upsert({raw_identifier:this.dataset.raw,real_name:this.value},{onConflict:'raw_identifier'})"
-        style="flex:1;min-width:120px;font-size:13px;padding:8px 10px"/>
-    </div>`).join('') : '<div style="font-family:var(--mono);font-size:12px;color:var(--text2)" style="color:var(--text2)">No other participants found.</div>';
-  // Subject selector
-  const sel = document.getElementById('vtt-subject-sel');
-  sel.innerHTML = `<option value="">Auto: "${esc(a.subjectName)}"</option>` + subjectsCache.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
-  document.getElementById('vtt-date').value = a.detectedDate || new Date().toISOString().slice(0,10);
-  updateVttChargePreview();
+        style="flex:1;min-width:110px;padding:9px 11px;font-size:13px"/>
+    </div>`).join(''):'<div style="font:400 12px/1 var(--mono);color:var(--tx3)">No other participants found.</div>';
+  const sel=document.getElementById('vtt-subj');
+  sel.innerHTML=`<option value="">Auto: "${esc(a.subjName)}"</option>`+subjectsCache.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
+  document.getElementById('vtt-date').value=a.detectedDate||new Date().toISOString().slice(0,10);
+  // Auto-fill session name
+  const autoSubjId=subjectsCache.find(s=>s.name.toLowerCase()===a.subjName.toLowerCase())?.id;
+  if(autoSubjId){
+    const autoName=await nextSessionName(autoSubjId);
+    document.getElementById('vtt-sess-name').value=autoName;
+    document.getElementById('vtt-sess-name').placeholder=autoName;
+  } else {
+    document.getElementById('vtt-sess-name').value='';
+    document.getElementById('vtt-sess-name').placeholder='e.g. AI_01 (auto when subject set)';
+  }
+  sel.onchange=async()=>{
+    const sid=parseInt(sel.value);
+    if(sid){const n=await nextSessionName(sid);document.getElementById('vtt-sess-name').value=n;}
+  };
+  updateVttPreview();
 }
 
-function updateVttChargePreview() {
-  const rate = parseFloat(document.getElementById('vtt-rate')?.value||0);
-  const a = vttAnalysis;
-  if (!a || !rate) { document.getElementById('vtt-charge-preview').innerHTML=''; return; }
-  const perAmt = Math.round((a.T_charge_min/60)*rate);
-  const total = (a.participants.length + vttPassiveNames.length) * perAmt;
-  document.getElementById('vtt-charge-preview').innerHTML = `
-    <div class="charge-box"><div>
-      <div class="cb-label">Per student</div>
-      <div class="cb-sub">${(a.T_charge_min/60).toFixed(3)} hrs × ${rate} EGP</div>
-    </div><div class="cb-val">${egp(perAmt)}</div></div>
-    ${(a.participants.length+vttPassiveNames.length)>0?`
-    <div class="charge-box green"><div>
-      <div class="cb-label">Session total</div>
-      <div class="cb-sub">${a.participants.length+vttPassiveNames.length} students</div>
-    </div><div class="cb-val">${egp(total)}</div></div>`:''} `;
+function updateVttPreview(){
+  const rate=parseFloat(document.getElementById('vtt-rate')?.value||0), a=vttAna;
+  if(!a||!rate){document.getElementById('vtt-preview').innerHTML='';return;}
+  const perAmt=Math.round((a.T_charge_min/60)*rate);
+  const tot=(a.participants.length+vttPassive.length)*perAmt;
+  document.getElementById('vtt-preview').innerHTML=`
+    <div class="cbox"><div><div class="cbox-lbl">Per student</div><div class="cbox-sub">${(a.T_charge_min/60).toFixed(3)} hrs × ${rate} EGP</div></div><div class="cbox-val">${egp(perAmt)}</div></div>
+    ${(a.participants.length+vttPassive.length)>0?`<div class="cbox g"><div><div class="cbox-lbl">Session total</div><div class="cbox-sub">${a.participants.length+vttPassive.length} students</div></div><div class="cbox-val">${egp(tot)}</div></div>`:''} `;
 }
 
-document.addEventListener('input', e => {
-  if (e.target.id === 'vtt-rate') updateVttChargePreview();
-});
-
-function addVttPassive() {
-  const input = document.getElementById('vtt-passive-input');
-  const name = input.value.trim();
-  if (!name) return;
-  vttPassiveNames.push({ id: crypto.randomUUID(), name });
-  input.value = '';
-  const rate = parseFloat(document.getElementById('vtt-rate')?.value||0);
-  const perAmt = vttAnalysis ? Math.round((vttAnalysis.T_charge_min/60)*rate) : 0;
-  document.getElementById('vtt-passive-list').innerHTML = vttPassiveNames.map(p=>`
+function addVttPassive(){
+  const inp=document.getElementById('vtt-pinp'), nm=inp.value.trim(); if(!nm)return;
+  vttPassive.push({id:crypto.randomUUID(),name:nm}); inp.value='';
+  const rate=parseFloat(document.getElementById('vtt-rate')?.value||0);
+  const perAmt=vttAna?Math.round((vttAna.T_charge_min/60)*rate):0;
+  document.getElementById('vtt-plist').innerHTML=vttPassive.map(p=>`
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
       <div class="dot passive"></div>
       <span style="flex:1;font-size:14px;font-weight:600">${esc(p.name)}</span>
-      <input type="number" class="inp" value="${perAmt}" id="pamt-${p.id}" style="width:90px;font-size:13px;padding:8px 10px"/>
-      <span style="font-family:var(--mono);font-size:11px;color:var(--text2)">EGP</span>
-      <button class="btn btn-danger btn-sm" onclick="vttPassiveNames=vttPassiveNames.filter(x=>x.id!=='${p.id}');addVttPassive()">✕</button>
+      <input type="number" class="inp" value="${perAmt}" id="pa-${p.id}" style="width:85px;padding:8px 10px;font-size:13px"/>
+      <span style="font:400 11px/1 var(--mono);color:var(--tx3)">EGP</span>
+      <button class="btn btn-d btn-sm" onclick="vttPassive=vttPassive.filter(x=>x.id!=='${p.id}');addVttPassive()">✕</button>
     </div>`).join('');
-  updateVttChargePreview();
+  updateVttPreview();
 }
 
-function resetVtt() { vttAnalysis=null; vttPassiveNames=[]; document.getElementById('vtt-result').style.display='none'; document.getElementById('vtt-drop-title').textContent='Drop .vtt file here or tap to browse'; }
+function resetVtt(){vttAna=null;vttPassive=[];document.getElementById('vtt-res').style.display='none';document.getElementById('vtt-dz-t').textContent='Drop .vtt file here or tap to browse';}
 
-async function logVttSession() {
-  const a = vttAnalysis;
-  if (!a) return;
-  const rate = parseFloat(document.getElementById('vtt-rate').value);
-  if (!rate) { toast('Enter a rate per hour'); return; }
-  const date = document.getElementById('vtt-date').value || new Date().toISOString().slice(0,10);
-  const selSubj = document.getElementById('vtt-subject-sel').value;
-  let subjectId = selSubj ? parseInt(selSubj) : null;
-  if (!subjectId) subjectId = await ensureSubjectByName(a.subjectName);
-  const perAmt = Math.round((a.T_charge_min/60)*rate);
+async function logVttSession(){
+  const a=vttAna; if(!a)return;
+  const rate=parseFloat(document.getElementById('vtt-rate').value); if(!rate){toast('Enter a rate per hour');return;}
+  const date=document.getElementById('vtt-date').value||new Date().toISOString().slice(0,10);
+  const selSubj=document.getElementById('vtt-subj').value;
+  let subjectId=selSubj?parseInt(selSubj):null;
+  if(!subjectId)subjectId=await ensureSubjByName(a.subjName);
+  // Determine session name
+  let sessName=document.getElementById('vtt-sess-name').value.trim();
+  if(!sessName)sessName=await nextSessionName(subjectId);
+  const perAmt=Math.round((a.T_charge_min/60)*rate);
   // Save name mappings
-  const participants = document.querySelectorAll('#vtt-participants input[data-raw]');
-  const nameMap = {};
-  participants.forEach(inp => { if (inp.value && inp.value !== inp.dataset.raw) nameMap[inp.dataset.raw]=inp.value; });
-  for (const [raw,real] of Object.entries(nameMap)) {
-    await sb.from('name_mappings').upsert({raw_identifier:raw,real_name:real},{onConflict:'raw_identifier'});
-  }
+  const parts=document.querySelectorAll('#vtt-parts input[data-raw]');
+  const nmMap={};
+  parts.forEach(inp=>{if(inp.value&&inp.value!==inp.dataset.raw)nmMap[inp.dataset.raw]=inp.value;});
+  for(const[raw,real]of Object.entries(nmMap)) await sb.from('name_mappings').upsert({raw_identifier:raw,real_name:real},{onConflict:'raw_identifier'});
   // Insert session
-  const { data: sess } = await sb.from('sessions').insert({
-    subject_id:subjectId, date, filename:a.filename,
-    t_meeting_min:a.T_meeting_min, t_absent_min:a.T_absent_min, t_charge_min:a.T_charge_min,
-    rate, total_worth: (a.participants.length + vttPassiveNames.length) * perAmt, notes:null
+  const{data:sess}=await sb.from('sessions').insert({
+    subject_id:subjectId,session_name:sessName,date,filename:a.filename,
+    t_meeting_min:a.T_meeting_min,t_absent_min:a.T_absent_min,t_charge_min:a.T_charge_min,
+    rate,total_worth:(a.participants.length+vttPassive.length)*perAmt,notes:null
   }).select().single();
   pushUndo({table:'sessions',op:'insert',id:sess.id});
-  // Insert live students
-  for (const raw of a.participants) {
-    const realName = nameMap[raw] || raw;
-    const stuId = await upsertStudent(realName, raw.includes('@')?raw:null);
-    await sb.from('session_students').insert({session_id:sess.id,student_id:stuId,student_type:'live',amount:perAmt,paid:false});
-    await sb.from('rate_mappings').upsert({student_id:stuId,subject_id:subjectId,rate},{onConflict:'student_id,subject_id'});
+  for(const raw of a.participants){
+    const rn=nmMap[raw]||raw;
+    const sId=await upsertStudent(rn,raw.includes('@')?raw:null);
+    await sb.from('session_students').insert({session_id:sess.id,student_id:sId,student_type:'live',amount:perAmt,paid:false});
+    await sb.from('rate_mappings').upsert({student_id:sId,subject_id:subjectId,rate},{onConflict:'student_id,subject_id'});
   }
-  // Insert passive students
-  for (const p of vttPassiveNames) {
-    const amtEl = document.getElementById('pamt-' + p.id);
-    const amt = amtEl ? parseFloat(amtEl.value)||perAmt : perAmt;
-    const stuId = await upsertStudent(p.name);
-    await sb.from('session_students').insert({session_id:sess.id,student_id:stuId,student_type:'passive',amount:amt,paid:false});
+  for(const p of vttPassive){
+    const ae=document.getElementById('pa-'+p.id);
+    const amt=ae?parseFloat(ae.value)||perAmt:perAmt;
+    const sId=await upsertStudent(p.name);
+    await sb.from('session_students').insert({session_id:sess.id,student_id:sId,student_type:'passive',amount:amt,paid:false});
   }
-  // Absence periods
-  for (const ap of a.absentPeriods) {
-    await sb.from('absence_periods').insert({session_id:sess.id,from_ts:ap.fromTs,to_ts:ap.toTs,duration_min:ap.durMin,talkers:ap.talkers.join(', ')});
-  }
-  await recalcSessionTotal(sess.id);
-  closeModal('vtt-modal'); resetVtt();
-  loadLedger(); loadStudents(); loadSubjectsTab(); loadHeaderStats();
-  toast(`Session logged ✓ — ${egp((a.participants.length+vttPassiveNames.length)*perAmt)}`);
+  for(const ap of a.absentPeriods) await sb.from('absence_periods').insert({session_id:sess.id,from_ts:ap.fromTs,to_ts:ap.toTs,duration_min:ap.durMin,talkers:ap.talkers.join(', ')});
+  await recalcTotal(sess.id);
+  closeMod('vtt-mod');resetVtt();
+  loadLedger();loadStudents();loadSubjectsTab();loadHeaderStats();
+  toast(`Session "${sessName}" logged ✓ — ${egp((a.participants.length+vttPassive.length)*perAmt)}`);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
 // MANUAL SESSION
 // ══════════════════════════════════════════════════════════════════════════════
-function openModal(id) {
-  if (id==='manual-modal') {
-    document.getElementById('m-date').value = new Date().toISOString().slice(0,10);
-    document.getElementById('m-subject').innerHTML = subjectsCache.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
-    manualStudents = [];
-    document.getElementById('m-students-list').innerHTML = '';
-    document.getElementById('m-charge-preview').innerHTML = '';
+function openMod(id){
+  if(id==='manual-mod'){
+    document.getElementById('m-date').value=new Date().toISOString().slice(0,10);
+    document.getElementById('m-subj').innerHTML=subjectsCache.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
+    manualStus=[]; document.getElementById('m-stus').innerHTML=''; document.getElementById('m-preview').innerHTML='';
+    autoFillManualName();
   }
-  if (id==='vtt-modal') {
-    document.getElementById('vtt-subject-sel').innerHTML = `<option value="">Auto-detect from filename</option>` + subjectsCache.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
-  }
-  if (id==='excel-modal') {
-    document.getElementById('excel-subject-sel').innerHTML = subjectsCache.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
-  }
-  document.getElementById(id).classList.add('open');
+  if(id==='vtt-mod') document.getElementById('vtt-subj').innerHTML=`<option value="">Auto-detect from filename</option>`+subjectsCache.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
+  if(id==='excel-mod') document.getElementById('xl-subj').innerHTML=subjectsCache.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
+  document.getElementById(id).classList.add('on');
 }
-function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+function closeMod(id){document.getElementById(id).classList.remove('on');}
 
-function addManualStudent() {
-  const name = document.getElementById('m-stu-input').value.trim();
-  const type = document.getElementById('m-stu-type').value;
-  if (!name) return;
-  manualStudents.push({id:crypto.randomUUID(),name,type});
-  document.getElementById('m-stu-input').value='';
-  renderManualStudents();
+async function autoFillManualName(){
+  const sid=parseInt(document.getElementById('m-subj').value);
+  if(!sid)return;
+  const n=await nextSessionName(sid);
+  document.getElementById('m-sess-name').value=n;
+  document.getElementById('m-sess-name').placeholder=n;
 }
 
-function renderManualStudents() {
-  const rate = parseFloat(document.getElementById('m-rate').value)||0;
-  const dur = parseFloat(document.getElementById('m-duration').value)||0;
-  const perAmt = Math.round((dur/60)*rate);
-  document.getElementById('m-students-list').innerHTML = manualStudents.map(s=>`
+function addManualStu(){
+  const nm=document.getElementById('m-stu-inp').value.trim(), tp=document.getElementById('m-stu-type').value;
+  if(!nm)return;
+  manualStus.push({id:crypto.randomUUID(),name:nm,type:tp});
+  document.getElementById('m-stu-inp').value='';
+  renderManualStus();
+}
+
+function renderManualStus(){
+  const rate=parseFloat(document.getElementById('m-rate').value)||0, dur=parseFloat(document.getElementById('m-dur').value)||0;
+  const perAmt=Math.round((dur/60)*rate);
+  document.getElementById('m-stus').innerHTML=manualStus.map(s=>`
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
       <div class="dot ${s.type}"></div>
       <span style="flex:1;font-size:14px;font-weight:600">${esc(s.name)}</span>
-      <span class="badge badge-${s.type}">${s.type}</span>
-      <input type="number" class="inp" value="${perAmt}" id="mamt-${s.id}" style="width:90px;font-size:13px;padding:8px 10px"/>
-      <span style="font-family:var(--mono);font-size:11px;color:var(--text2)">EGP</span>
-      <button class="btn btn-danger btn-sm" onclick="manualStudents=manualStudents.filter(x=>x.id!=='${s.id}');renderManualStudents()">✕</button>
+      <span class="badge b-${s.type}">${s.type}</span>
+      <input type="number" class="inp" value="${perAmt}" id="ma-${s.id}" style="width:85px;padding:8px 10px;font-size:13px"/>
+      <span style="font:400 11px/1 var(--mono);color:var(--tx3)">EGP</span>
+      <button class="btn btn-d btn-sm" onclick="manualStus=manualStus.filter(x=>x.id!=='${s.id}');renderManualStus()">✕</button>
     </div>`).join('');
-  if (rate && dur && manualStudents.length) {
-    document.getElementById('m-charge-preview').innerHTML = `
-      <div class="charge-box green"><div>
-        <div class="cb-label">Session total</div>
-        <div class="cb-sub">${manualStudents.length} students × ${egp(perAmt)}</div>
-      </div><div class="cb-val">${egp(manualStudents.length*perAmt)}</div></div>`;
-  }
+  if(rate&&dur&&manualStus.length) document.getElementById('m-preview').innerHTML=`<div class="cbox g"><div><div class="cbox-lbl">Session total</div><div class="cbox-sub">${manualStus.length} students</div></div><div class="cbox-val">${egp(manualStus.length*perAmt)}</div></div>`;
 }
-document.addEventListener('input', e => {
-  if (['m-rate','m-duration'].includes(e.target.id)) renderManualStudents();
-});
+document.addEventListener('input',e=>{if(['m-rate','m-dur'].includes(e.target.id))renderManualStus();});
 
-async function logManualSession() {
-  const subjectId = parseInt(document.getElementById('m-subject').value);
-  const date = document.getElementById('m-date').value;
-  const dur = parseFloat(document.getElementById('m-duration').value)||0;
-  const rate = parseFloat(document.getElementById('m-rate').value)||0;
-  const notes = document.getElementById('m-notes').value;
-  if (!subjectId||!date||!dur) { toast('Subject, date and duration are required'); return; }
-  const total = manualStudents.reduce((a,s)=>{const el=document.getElementById('mamt-'+s.id);return a+(el?parseFloat(el.value)||0:0);},0);
-  const { data: sess } = await sb.from('sessions').insert({
-    subject_id:subjectId,date,t_meeting_min:dur,t_absent_min:0,t_charge_min:dur,rate,total_worth:total,notes
-  }).select().single();
+async function logManualSession(){
+  const subjectId=parseInt(document.getElementById('m-subj').value), date=document.getElementById('m-date').value;
+  const dur=parseFloat(document.getElementById('m-dur').value)||0, rate=parseFloat(document.getElementById('m-rate').value)||0;
+  const notes=document.getElementById('m-notes').value;
+  let sessName=document.getElementById('m-sess-name').value.trim();
+  if(!subjectId||!date||!dur){toast('Subject, date and duration required');return;}
+  if(!sessName)sessName=await nextSessionName(subjectId);
+  const total=manualStus.reduce((a,s)=>{const el=document.getElementById('ma-'+s.id);return a+(el?parseFloat(el.value)||0:0);},0);
+  const{data:sess}=await sb.from('sessions').insert({subject_id:subjectId,session_name:sessName,date,t_meeting_min:dur,t_absent_min:0,t_charge_min:dur,rate,total_worth:total,notes}).select().single();
   pushUndo({table:'sessions',op:'insert',id:sess.id});
-  for (const s of manualStudents) {
-    const el = document.getElementById('mamt-'+s.id);
-    const amt = el?parseFloat(el.value)||0:Math.round((dur/60)*rate);
-    const stuId = await upsertStudent(s.name);
-    await sb.from('session_students').insert({session_id:sess.id,student_id:stuId,student_type:s.type,amount:amt,paid:false});
+  for(const s of manualStus){
+    const el=document.getElementById('ma-'+s.id);
+    const amt=el?parseFloat(el.value)||0:Math.round((dur/60)*rate);
+    const sId=await upsertStudent(s.name);
+    await sb.from('session_students').insert({session_id:sess.id,student_id:sId,student_type:s.type,amount:amt,paid:false});
   }
-  closeModal('manual-modal');
-  loadLedger(); loadStudents(); loadSubjectsTab(); loadHeaderStats();
-  toast(`Manual session logged ✓ — ${egp(total)}`);
+  closeMod('manual-mod');
+  loadLedger();loadStudents();loadSubjectsTab();loadHeaderStats();
+  toast(`Session "${sessName}" logged ✓ — ${egp(total)}`);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
 // PASSIVE FLOW
 // ══════════════════════════════════════════════════════════════════════════════
-async function openPassiveFlow() {
-  passiveFlow = {};
-  document.getElementById('passive-step-subject').style.display='';
-  document.getElementById('passive-step-session').style.display='none';
-  document.getElementById('passive-step-name').style.display='none';
-  document.getElementById('passive-title').childNodes[0].textContent='Add Passive Student — Pick Subject ';
-  // Render subjects
-  document.getElementById('passive-subject-list').innerHTML = subjectsCache.map(s=>`
-    <div class="entry-card" style="flex-direction:row;text-align:left;gap:12px;padding:14px 16px;margin-bottom:8px" onclick="passivePickSubject(${s.id},'${esc(s.name)}')">
-      <div class="eicon" style="font-size:24px">📚</div>
+async function openPassiveFlow(){
+  passiveFlow={};
+  document.getElementById('pass-step-subj').style.display='';
+  document.getElementById('pass-step-sess').style.display='none';
+  document.getElementById('pass-step-name').style.display='none';
+  document.getElementById('pass-subj-list').innerHTML=subjectsCache.map(s=>`
+    <div class="ec" style="flex-direction:row;text-align:left;gap:12px;padding:14px 16px;margin-bottom:8px" onclick="passPickSubj(${s.id},'${esc(s.name)}')">
+      <div class="ec-icon" style="font-size:24px">📚</div>
+      <div><div style="font-size:15px;font-weight:700">${esc(s.name)}</div>${s.term?`<div style="font:400 11px/1 var(--mono);color:var(--tx3)">Term ${esc(s.term)}</div>`:''}</div>
+    </div>`).join('')||'<div class="empty"><div class="empty-tx">No subjects — create one in Settings</div></div>';
+  openMod('passive-mod');
+}
+
+async function passPickSubj(subjId,name){
+  passiveFlow.subjId=subjId;
+  document.getElementById('pass-step-subj').style.display='none';
+  document.getElementById('pass-step-sess').style.display='';
+  const{data}=await sb.from('sessions').select('id,date,session_name,t_charge_min,rate').eq('subject_id',subjId).order('date',{ascending:false});
+  document.getElementById('pass-sess-list').innerHTML=(data||[]).map(s=>`
+    <div class="ec" style="flex-direction:row;text-align:left;gap:12px;padding:14px 16px;margin-bottom:8px" onclick="passPickSess(${s.id},${s.rate},${s.t_charge_min})">
+      <div class="ec-icon" style="font-size:24px">📋</div>
       <div>
-        <div style="font-weight:700;font-size:15px">${esc(s.name)}</div>
-        ${s.term?`<div style="font-family:var(--mono);font-size:11px;color:var(--text2)">Term ${esc(s.term)}</div>`:''}
+        <div style="font:600 13px/1 var(--mono);color:var(--amber);margin-bottom:3px">${esc(s.session_name||'Session')}</div>
+        <div style="font-size:14px;font-weight:600">${s.date}</div>
+        <div style="font:400 11px/1 var(--mono);color:var(--tx3)">per student: ${egp(Math.round((s.t_charge_min/60)*s.rate))}</div>
       </div>
-    </div>`).join('') || '<div class="empty"><div class="empty-text">No subjects yet — create one in Settings</div></div>';
-  openModal('passive-modal');
+    </div>`).join('')||'<div class="empty"><div class="empty-tx">No sessions for this subject</div></div>';
 }
 
-async function passivePickSubject(subjectId, name) {
-  passiveFlow.subjectId = subjectId;
-  document.getElementById('passive-step-subject').style.display='none';
-  document.getElementById('passive-step-session').style.display='';
-  document.getElementById('passive-title').childNodes[0].textContent=`Passive — ${name} `;
-  const { data } = await sb.from('sessions').select('id,date,t_charge_min,rate').eq('subject_id',subjectId).order('date',{ascending:false});
-  document.getElementById('passive-session-list').innerHTML = (data||[]).map(s=>`
-    <div class="entry-card" style="flex-direction:row;text-align:left;gap:12px;padding:14px 16px;margin-bottom:8px" onclick="passivePickSession(${s.id},${s.rate},${s.t_charge_min})">
-      <div class="eicon" style="font-size:24px">📋</div>
-      <div>
-        <div style="font-weight:700;font-size:15px">${s.date}</div>
-        <div style="font-family:var(--mono);font-size:11px;color:var(--text2)">${s.t_charge_min}m · ${s.rate} EGP/hr · ${egp(Math.round((s.t_charge_min/60)*s.rate))} per student</div>
-      </div>
-    </div>`).join('') || '<div class="empty"><div class="empty-text">No sessions for this subject</div></div>';
+function passPickSess(sessId,rate,tCharge){
+  passiveFlow.sessId=sessId; passiveFlow.amt=Math.round((tCharge/60)*rate);
+  document.getElementById('pass-step-sess').style.display='none';
+  document.getElementById('pass-step-name').style.display='';
+  document.getElementById('pass-amt').value=passiveFlow.amt;
+  document.getElementById('pass-name').value='';
+  setTimeout(()=>document.getElementById('pass-name').focus(),100);
 }
 
-function passivePickSession(sessId, rate, tCharge) {
-  passiveFlow.sessionId = sessId;
-  passiveFlow.amount = Math.round((tCharge/60)*rate);
-  document.getElementById('passive-step-session').style.display='none';
-  document.getElementById('passive-step-name').style.display='';
-  document.getElementById('passive-amount-input').value = passiveFlow.amount;
-  document.getElementById('passive-name-input').value='';
-  setTimeout(()=>document.getElementById('passive-name-input').focus(),100);
-}
-
-async function confirmPassive() {
-  const name = document.getElementById('passive-name-input').value.trim();
-  const amt = parseFloat(document.getElementById('passive-amount-input').value)||passiveFlow.amount||0;
-  if (!name) { toast('Enter a name'); return; }
-  const stuId = await upsertStudent(name);
-  const { data } = await sb.from('session_students').insert({session_id:passiveFlow.sessionId,student_id:stuId,student_type:'passive',amount:amt,paid:false}).select().single();
+async function confirmPassive(){
+  const nm=document.getElementById('pass-name').value.trim(), amt=parseFloat(document.getElementById('pass-amt').value)||passiveFlow.amt||0;
+  if(!nm){toast('Enter a name');return;}
+  const sId=await upsertStudent(nm);
+  const{data}=await sb.from('session_students').insert({session_id:passiveFlow.sessId,student_id:sId,student_type:'passive',amount:amt,paid:false}).select().single();
   pushUndo({table:'session_students',op:'insert',id:data.id});
-  await recalcSessionTotal(passiveFlow.sessionId);
-  closeModal('passive-modal');
-  loadLedger(); loadStudents(); loadHeaderStats();
-  toast(`${name} added as passive student ✓`);
+  await recalcTotal(passiveFlow.sessId);
+  closeMod('passive-mod');
+  loadLedger();loadStudents();loadHeaderStats();
+  toast(`${nm} added as passive ✓`);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// EXCEL IMPORT (client-side via SheetJS)
+// EXCEL IMPORT
 // ══════════════════════════════════════════════════════════════════════════════
-function extractDateFromExcel(wb, file) {
-  // Try to find a date in sheet properties or file name
-  const fnMatch = (file.name||'').match(/(\d{4})[-_](\d{2})[-_](\d{2})/);
-  if (fnMatch) return `${fnMatch[1]}-${fnMatch[2]}-${fnMatch[3]}`;
-  // Try Core Properties (creation/modification date embedded in xlsx)
-  if (wb.Props && wb.Props.ModifiedDate) {
-    try {
-      const d = new Date(wb.Props.ModifiedDate);
-      if (!isNaN(d)) return d.toISOString().slice(0,10);
-    } catch(e) {}
-  }
-  // Fall back to file last-modified
-  if (file.lastModified) {
-    return new Date(file.lastModified).toISOString().slice(0,10);
-  }
+function handleExcelDrop(e){e.preventDefault();handleExcelFile(e.dataTransfer.files[0]);}
+
+function extractDateFromExcel(wb,file){
+  const fm=(file.name||'').match(/(\d{4})[-_](\d{2})[-_](\d{2})/);
+  if(fm)return`${fm[1]}-${fm[2]}-${fm[3]}`;
+  if(wb.Props?.ModifiedDate){try{const d=new Date(wb.Props.ModifiedDate);if(!isNaN(d))return d.toISOString().slice(0,10);}catch(e){}}
+  if(file.lastModified)return new Date(file.lastModified).toISOString().slice(0,10);
   return new Date().toISOString().slice(0,10);
 }
 
-async function handleExcelFile(file) {
-  if (!file) return;
-  document.getElementById('excel-drop-title').textContent = `Processing: ${file.name}…`;
-  const ab = await file.arrayBuffer();
-  const wb = XLSX.read(ab, {type:'array', cellDates:true, bookProps:true});
-  // Find 262_Do or first sheet
-  const sheetName = wb.SheetNames.find(n=>n.includes('Do')||n.includes('do')) || wb.SheetNames[0];
-  const ws = wb.Sheets[sheetName];
-  const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:null});
-  const detectedDate = extractDateFromExcel(wb, file);
-  excelData = { rows, sheetName, detectedDate };
-  const preview = `Sheet: "${sheetName}" · ${rows.length} rows · ${(rows[0]||[]).filter(Boolean).length} columns · Date: ${detectedDate}`;
-  document.getElementById('excel-preview').textContent = preview;
-  document.getElementById('excel-subject-sel').innerHTML = subjectsCache.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
-  document.getElementById('excel-result').style.display='block';
-  document.getElementById('excel-drop-title').textContent = `✓ Loaded: ${file.name}`;
+async function handleExcelFile(file){
+  if(!file)return;
+  document.getElementById('xl-dz-t').textContent=`Processing: ${file.name}…`;
+  const ab=await file.arrayBuffer();
+  const wb=XLSX.read(ab,{type:'array',cellDates:true,bookProps:true});
+  const sheetName=wb.SheetNames.find(n=>n.includes('Do')||n.includes('do'))||wb.SheetNames[0];
+  const ws=wb.Sheets[sheetName];
+  const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
+  const det=extractDateFromExcel(wb,file);
+  excelData={rows,sheetName,detectedDate:det};
+  document.getElementById('xl-preview').textContent=`Sheet: "${sheetName}" · ${rows.length} rows · Date detected: ${det}`;
+  document.getElementById('xl-res').style.display='block';
+  document.getElementById('xl-dz-t').textContent=`✓ Loaded: ${file.name}`;
 }
 
-async function doExcelImport() {
-  if (!excelData) return;
-  const subjectId = parseInt(document.getElementById('excel-subject-sel').value);
-  if (!subjectId) { toast('Select a subject'); return; }
-  const { rows } = excelData;
-  let studentsImported=0, sessionsImported=0;
-  // Find header row and detect session columns
-  for (let ri=0; ri<rows.length; ri++) {
-    const row = rows[ri];
-    if (!row || !row[0]) continue;
-    const nameStr = String(row[0]).trim();
-    if (!nameStr || nameStr.toUpperCase()==='TOTAL') continue;
-    // Find total and total_paid cols from header
-    if (ri===0) continue; // skip actual header
-    const headerRow = rows[0] || [];
-    const totalCol = headerRow.findIndex(h=>h&&String(h).toLowerCase()==='total');
-    const paidCol = headerRow.findIndex(h=>h&&String(h).toLowerCase().includes('paid'));
-    const total = totalCol>-1 ? parseFloat(row[totalCol])||0 : 0;
-    const totalPaid = paidCol>-1 ? parseFloat(row[paidCol])||0 : 0;
-    const paid = total>0 && totalPaid>=total;
-    // Session columns (everything between col 1 and total col that has a value)
-    const endCol = totalCol>-1 ? totalCol : row.length;
-    for (let ci=1; ci<endCol; ci++) {
-      const amount = parseFloat(row[ci]);
-      if (!amount || isNaN(amount)) continue;
-      const label = headerRow[ci]!=null ? String(headerRow[ci]) : `Session ${ci}`;
-      // Find or create a session for this column
-      const { data: existSess } = await sb.from('sessions')
-        .select('id').eq('subject_id',subjectId).eq('notes',`imported:${label}`).maybeSingle();
+async function doExcelImport(){
+  if(!excelData)return;
+  const subjectId=parseInt(document.getElementById('xl-subj').value);
+  if(!subjectId){toast('Select a subject');return;}
+  const{rows,detectedDate}=excelData;
+  let stuImp=0,sessImp=0;
+  const headerRow=rows[0]||[];
+  const totalCol=headerRow.findIndex(h=>h&&String(h).toLowerCase()==='total');
+  const paidCol=headerRow.findIndex(h=>h&&String(h).toLowerCase().includes('paid'));
+  const endCol=totalCol>-1?totalCol:headerRow.length;
+
+  for(let ri=1;ri<rows.length;ri++){
+    const row=rows[ri]; if(!row||!row[0])continue;
+    const nmStr=String(row[0]).trim(); if(!nmStr||nmStr.toUpperCase()==='TOTAL')continue;
+    const total=totalCol>-1?parseFloat(row[totalCol])||0:0;
+    const totalPaid=paidCol>-1?parseFloat(row[paidCol])||0:0;
+    const paid=total>0&&totalPaid>=total;
+    for(let ci=1;ci<endCol;ci++){
+      const amt=parseFloat(row[ci]); if(!amt||isNaN(amt))continue;
+      const label=headerRow[ci]!=null?String(headerRow[ci]):`Session ${ci}`;
+      const noteKey=`imported:${label}`;
+      const{data:ex}=await sb.from('sessions').select('id').eq('subject_id',subjectId).eq('notes',noteKey).maybeSingle();
       let sessId;
-      if (existSess) { sessId=existSess.id; }
-      else {
-        const { data: ns } = await sb.from('sessions').insert({subject_id:subjectId,date:excelData.detectedDate||'2024-01-01',t_meeting_min:0,t_absent_min:0,t_charge_min:0,rate:0,total_worth:0,notes:`imported:${label}`}).select().single();
-        sessId=ns.id; sessionsImported++;
+      if(ex){sessId=ex.id;}else{
+        // Auto-name imported sessions
+        const autoName=await nextSessionName(subjectId);
+        const{data:ns}=await sb.from('sessions').insert({subject_id:subjectId,session_name:autoName,date:detectedDate,t_meeting_min:0,t_absent_min:0,t_charge_min:0,rate:0,total_worth:0,notes:noteKey}).select().single();
+        sessId=ns.id; sessImp++;
       }
-      const stuId = await upsertStudent(nameStr);
-      await sb.from('session_students').upsert({session_id:sessId,student_id:stuId,student_type:'live',amount,paid},{onConflict:'session_id,student_id'});
-      studentsImported++;
+      const sId=await upsertStudent(nmStr);
+      await sb.from('session_students').upsert({session_id:sessId,student_id:sId,student_type:'live',amount:amt,paid},{onConflict:'session_id,student_id'});
+      stuImp++;
     }
   }
-  // Recalc all session totals for this subject
-  const { data: subjSess } = await sb.from('sessions').select('id').eq('subject_id',subjectId);
-  for (const s of (subjSess||[])) await recalcSessionTotal(s.id);
-  closeModal('excel-modal');
-  loadLedger(); loadStudents(); loadSubjectsTab(); loadHeaderStats();
-  toast(`Import done: ${studentsImported} entries, ${sessionsImported} sessions ✓`);
+  const{data:sjs}=await sb.from('sessions').select('id').eq('subject_id',subjectId);
+  for(const s of(sjs||[]))await recalcTotal(s.id);
+  closeMod('excel-mod');
+  loadLedger();loadStudents();loadSubjectsTab();loadHeaderStats();
+  toast(`Import done: ${stuImp} entries, ${sessImp} sessions ✓`);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
 // HELPERS
 // ══════════════════════════════════════════════════════════════════════════════
-async function upsertStudent(name, email=null) {
-  const { data } = await sb.from('students').upsert({name,email:email||undefined,default_rate:0},{onConflict:'name',ignoreDuplicates:false}).select('id').single();
-  if (data) return data.id;
-  const { data: ex } = await sb.from('students').select('id').eq('name',name).single();
+async function upsertStudent(name,email=null){
+  const{data}=await sb.from('students').upsert({name,email:email||undefined,default_rate:0},{onConflict:'name',ignoreDuplicates:false}).select('id').single();
+  if(data)return data.id;
+  const{data:ex}=await sb.from('students').select('id').eq('name',name).single();
   return ex.id;
 }
 
-async function ensureSubjectByName(name) {
-  const found = subjectsCache.find(s=>s.name.toLowerCase()===name.toLowerCase());
-  if (found) return found.id;
-  // Create under BNU > General
-  const uniId = await (async()=>{
-    const { data } = await sb.from('universities').upsert({name:'BNU'},{onConflict:'name'}).select('id').single();
-    return data?.id || (await sb.from('universities').select('id').eq('name','BNU').single()).data.id;
-  })();
-  const deptId = await (async()=>{
-    const { data } = await sb.from('departments').upsert({university_id:uniId,name:'General'},{onConflict:'university_id,name'}).select('id').single();
-    return data?.id || (await sb.from('departments').select('id').eq('university_id',uniId).eq('name','General').single()).data.id;
-  })();
-  const { data } = await sb.from('subjects').upsert({department_id:deptId,name},{onConflict:'department_id,name'}).select('id').single();
-  await refreshSubjectsCache();
-  return data?.id || (await sb.from('subjects').select('id').eq('department_id',deptId).eq('name',name).single()).data.id;
+async function ensureSubjByName(name){
+  const found=subjectsCache.find(s=>s.name.toLowerCase()===name.toLowerCase());
+  if(found)return found.id;
+  const{data:ud}=await sb.from('universities').upsert({name:'BNU'},{onConflict:'name'}).select('id').single();
+  const uId=ud?.id||(await sb.from('universities').select('id').eq('name','BNU').single()).data.id;
+  const{data:dd}=await sb.from('departments').upsert({university_id:uId,name:'General'},{onConflict:'university_id,name'}).select('id').single();
+  const dId=dd?.id||(await sb.from('departments').select('id').eq('university_id',uId).eq('name','General').single()).data.id;
+  const{data:sd}=await sb.from('subjects').upsert({department_id:dId,name},{onConflict:'department_id,name'}).select('id').single();
+  await refreshSubjects();
+  return sd?.id||(await sb.from('subjects').select('id').eq('department_id',dId).eq('name',name).single()).data.id;
 }
 
-async function recalcSessionTotal(sessId) {
-  const { data } = await sb.from('session_students').select('amount').eq('session_id',sessId);
-  const total = (data||[]).reduce((a,r)=>a+(r.amount||0),0);
-  await sb.from('sessions').update({total_worth:total}).eq('id',sessId);
+async function recalcTotal(sessId){
+  const{data}=await sb.from('session_students').select('amount').eq('session_id',sessId);
+  const tot=(data||[]).reduce((a,r)=>a+(r.amount||0),0);
+  await sb.from('sessions').update({total_worth:tot}).eq('id',sessId);
 }
 
-function resolveNameLocal(raw) {
-  // Best-effort local resolution — full resolution happens server-side
-  return raw;
-}
-
-function egp(n) { return (+n||0).toLocaleString() + ' EGP'; }
-function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-
-// Undo
-function pushUndo(entry) { undoStack.push(entry); if(undoStack.length>30)undoStack.shift(); }
-async function undoLast() {
-  if (!undoStack.length) { toast('Nothing to undo'); return; }
-  const entry = undoStack.pop();
-  if (entry.op==='insert') { await sb.from(entry.table).delete().eq('id',entry.id); }
-  if (entry.op==='update') { await sb.from(entry.table).update(entry.prev).eq('id',entry.id); }
-  loadLedger(); loadStudents(); loadSubjectsTab(); loadHeaderStats();
+function pushUndo(e){undoStack.push(e);if(undoStack.length>30)undoStack.shift();}
+async function undoLast(){
+  if(!undoStack.length){toast('Nothing to undo');return;}
+  const e=undoStack.pop();
+  if(e.op==='insert')await sb.from(e.table).delete().eq('id',e.id);
+  if(e.op==='update'){const o={};o[Object.keys(e.prev)[0]]=Object.values(e.prev)[0];await sb.from(e.table).update(o).eq('id',e.id);}
+  loadLedger();loadStudents();loadSubjectsTab();loadHeaderStats();
   toast('Undone ✓');
 }
 
-// Toast
-let toastTimer;
-function toast(msg) {
-  clearTimeout(toastTimer);
-  let el = document.getElementById('toast-el');
-  if (!el) { el=document.createElement('div'); el.id='toast-el'; el.className='toast'; document.body.appendChild(el); }
-  el.textContent=msg; el.style.display='block';
-  toastTimer=setTimeout(()=>{el.style.display='none';},2600);
+function egp(n){return(+n||0).toLocaleString()+' EGP';}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+
+let _toastT;
+function toast(msg){
+  clearTimeout(_toastT);
+  let el=document.getElementById('_toast');
+  if(!el){el=document.createElement('div');el.id='_toast';el.className='toast';document.body.appendChild(el);}
+  el.textContent=msg;el.style.display='block';
+  _toastT=setTimeout(()=>el.style.display='none',2700);
 }
 
-// Close modal on overlay click
-document.querySelectorAll('.modal-overlay').forEach(o=>{
-  o.addEventListener('click',e=>{ if(e.target===o) closeModal(o.id); });
-});
+document.querySelectorAll('.mo').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)closeMod(o.id);}));
 
-// ══════════════════════════════════════════════════════════════════════════════
-// START
-// ══════════════════════════════════════════════════════════════════════════════
 init();
 </script>
 </body>
