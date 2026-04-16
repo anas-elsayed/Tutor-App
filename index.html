@@ -351,11 +351,13 @@ create policy "all" on app_settings for all using(true) with check(true);</div>
   <div class="pg on" id="pg-entry">
     <div class="ptitle">Add Data <button class="btn btn-g btn-sm" onclick="undoLast()">↩ Undo</button></div>
     <div class="egrid">
-      <div class="ec" onclick="openMod('vtt-mod')" id="dz-card"
+      <div class="ec" id="dz-card"
         ondragover="event.preventDefault();this.classList.add('over')"
-        ondragleave="this.classList.remove('over')" ondrop="handleDrop(event)">
+        ondragleave="this.classList.remove('over')" ondrop="handleDrop(event)"
+        onclick="document.getElementById('multi-vtt-fi').click()">
+        <input type="file" id="multi-vtt-fi" accept=".vtt,.txt" multiple style="display:none" onchange="handleMultiVtt(this.files)"/>
         <div class="ec-icon">📄</div><div class="ec-title">VTT Transcript</div>
-        <div class="ec-sub">Drop Teams .vtt or tap to browse</div>
+        <div class="ec-sub">Drop 1 or many .vtt files — processed in sequence</div>
       </div>
       <div class="ec" onclick="openMod('excel-mod')">
         <div class="ec-icon">📊</div><div class="ec-title">Excel Import</div>
@@ -371,6 +373,42 @@ create policy "all" on app_settings for all using(true) with check(true);</div>
       </div>
     </div>
     <div id="entry-recent"></div>
+
+    <!-- BATCH VTT PROCESSOR -->
+    <div style="margin-top:18px;background:var(--bg2);border:1px solid var(--line);border-radius:var(--r2);padding:16px">
+      <div style="font:700 15px/1 var(--sans);margin-bottom:4px">⚡ Batch VTT Processor</div>
+      <div style="font:400 12px/1.5 var(--mono);color:var(--tx3);margin-bottom:12px">
+        Select multiple .vtt files at once — they will be processed one-by-one in order.<br/>
+        Subject, rate and student names are remembered between files.
+      </div>
+      <div class="dz" id="batch-dz" onclick="document.getElementById('batch-fi').click()"
+        ondragover="event.preventDefault();this.classList.add('over')"
+        ondragleave="this.classList.remove('over')"
+        ondrop="handleBatchDrop(event)">
+        <input type="file" id="batch-fi" accept=".vtt" multiple style="display:none" onchange="handleBatchFiles(this.files)"/>
+        <div class="dz-ic">📂</div>
+        <div class="dz-t">Drop multiple .vtt files or tap to select all at once</div>
+        <div class="dz-h">Hold Ctrl/Cmd to select multiple files in the picker</div>
+      </div>
+      <div id="batch-queue" style="display:none">
+        <div style="font:600 13px/1 var(--mono);color:var(--amber);margin-bottom:10px" id="batch-status">Ready</div>
+        <div id="batch-list"></div>
+        <div class="frow" style="margin-top:12px">
+          <div class="fld">
+            <label>Subject (applies to all)</label>
+            <select class="inp" id="batch-subj"></select>
+          </div>
+          <div class="fld">
+            <label>Rate EGP/hr (applies to all)</label>
+            <input class="inp" type="number" id="batch-rate" placeholder="200"/>
+          </div>
+        </div>
+        <div class="brow">
+          <button class="btn btn-p" onclick="runBatch()">⚡ Process All</button>
+          <button class="btn btn-g" onclick="clearBatch()">Clear</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- TAB: LEDGER -->
@@ -584,6 +622,8 @@ create policy "all" on app_settings for all using(true) with check(true);</div>
 let sb=null, YOUR_EMAIL='', SILENCE_THRESHOLD=180;
 let undoStack=[], vttAna=null, vttPassive=[], manualStus=[];
 let passiveFlow={}, excelData=null, subjectsCache=[];
+let lastSubjectId=null, lastRate=null; // remembered across VTT sessions
+let vttQueue=[], vttQueueRunning=false; // multi-file batch queue
 
 // ══════════════════════════════════════════════════════════════════════════════
 // INIT / SETUP
@@ -1015,15 +1055,36 @@ async function createSubject(){
 // ══════════════════════════════════════════════════════════════════════════════
 function handleDrop(e){
   e.preventDefault(); document.getElementById('dz-card').classList.remove('over');
-  const f=e.dataTransfer.files[0]; if(f){openMod('vtt-mod');setTimeout(()=>handleVttFile(f),100);}
+  const files=Array.from(e.dataTransfer.files).filter(f=>f.name.match(/\.vtt$/i)||f.name.match(/\.txt$/i));
+  if(!files.length)return;
+  if(files.length===1){openMod('vtt-mod');setTimeout(()=>handleVttFile(files[0]),100);}
+  else handleMultiVtt(files);
+}
+function handleMultiVtt(filesRaw){
+  const files=Array.from(filesRaw);
+  if(!files.length)return;
+  if(files.length===1){openMod('vtt-mod');setTimeout(()=>handleVttFile(files[0]),100);return;}
+  // Sort by lastModified (oldest first = chronological session order)
+  files.sort((a,b)=>a.lastModified-b.lastModified);
+  vttQueue.push(...files);
+  updateQueueBar();
+  if(!vttQueueRunning)processVttQueue();
 }
 function handleVttDrop(e){e.preventDefault();document.getElementById('vtt-dz').classList.remove('over');handleVttFile(e.dataTransfer.files[0]);}
 
 function extractDateFromFile(text,filename,file){
-  const fm=filename.match(/(\d{4})[-_](\d{2})[-_](\d{2})/);
-  if(fm)return`${fm[1]}-${fm[2]}-${fm[3]}`;
-  const nm=text.match(/NOTE.*?(\d{4}[-\/]\d{2}[-\/]\d{2})/i);
-  if(nm)return nm[1].replace(/\//g,'-');
+  // Teams filenames: "Meeting in X-20240514_123456" or "Meeting in X 2024-05-14"
+  // Pattern 1: YYYYMMDD_HHMMSS (Teams default)
+  const p1=filename.match(/[_-](\d{4})(\d{2})(\d{2})[_-]\d{6}/);
+  if(p1)return`${p1[1]}-${p1[2]}-${p1[3]}`;
+  // Pattern 2: YYYY-MM-DD or YYYY_MM_DD anywhere in filename
+  const p2=filename.match(/(\d{4})[-_](\d{1,2})[-_](\d{1,2})/);
+  if(p2)return`${p2[1]}-${String(p2[2]).padStart(2,'0')}-${String(p2[3]).padStart(2,'0')}`;
+  // Pattern 3: VTT NOTE line with date
+  const p3=text.match(/NOTE.*?(\d{4}[-\/]\d{2}[-\/]\d{2})/i);
+  if(p3)return p3[1].replace(/\//g,'-');
+  // Pattern 4: file.lastModified — only reliable if file not re-downloaded today
+  // We show it but flag it as approximate
   if(file?.lastModified)return new Date(file.lastModified).toISOString().slice(0,10);
   return new Date().toISOString().slice(0,10);
 }
@@ -1095,10 +1156,16 @@ async function renderVttRes(){
   const sel=document.getElementById('vtt-subj');
   sel.innerHTML=`<option value="">Auto: "${esc(a.subjName)}"</option>`+subjectsCache.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
   document.getElementById('vtt-date').value=a.detectedDate||new Date().toISOString().slice(0,10);
+  // Auto-select subject: filename match > last used subject
+  const fnMatch=subjectsCache.find(s=>s.name.toLowerCase()===a.subjName.toLowerCase() || a.subjName.toLowerCase().includes(s.name.toLowerCase()));
+  const subjectToUse=fnMatch?.id||lastSubjectId||null;
+  if(subjectToUse)sel.value=subjectToUse;
+  // Restore last rate
+  if(lastRate)document.getElementById('vtt-rate').value=lastRate;
   // Auto-fill session name
-  const autoSubjId=subjectsCache.find(s=>s.name.toLowerCase()===a.subjName.toLowerCase())?.id;
-  if(autoSubjId){
-    const autoName=await nextSessionName(autoSubjId);
+  const resolvedSubjId=subjectToUse||fnMatch?.id;
+  if(resolvedSubjId){
+    const autoName=await nextSessionName(parseInt(resolvedSubjId));
     document.getElementById('vtt-sess-name').value=autoName;
     document.getElementById('vtt-sess-name').placeholder=autoName;
   } else {
@@ -1140,6 +1207,102 @@ function addVttPassive(){
 
 function resetVtt(){vttAna=null;vttPassive=[];document.getElementById('vtt-res').style.display='none';document.getElementById('vtt-dz-t').textContent='Drop .vtt file here or tap to browse';}
 
+// ── Queue engine ─────────────────────────────────────────────────────────────
+function updateQueueBar(){
+  const bar=document.getElementById('queue-bar');
+  const total=vttQueue.length;
+  if(total===0&&!vttQueueRunning){bar.style.display='none';return;}
+  bar.style.display='block';
+}
+
+async function processVttQueue(){
+  if(!vttQueue.length){
+    vttQueueRunning=false;
+    document.getElementById('queue-bar').style.display='none';
+    loadLedger();loadStudents();loadSubjectsTab();loadHeaderStats();
+    toast('All sessions logged ✓');
+    return;
+  }
+  vttQueueRunning=true;
+  const file=vttQueue.shift();
+  const done_count=/* track via closure */ (() => {
+    if(!processVttQueue._total)processVttQueue._total=vttQueue.length+1;
+    processVttQueue._done=(processVttQueue._done||0)+1;
+    return processVttQueue._done;
+  })();
+  const total=processVttQueue._total||1;
+  const pct=Math.round((done_count-1)/total*100);
+
+  document.getElementById('queue-status').textContent=`Processing: ${file.name}`;
+  document.getElementById('queue-count').textContent=`${done_count}/${total}`;
+  document.getElementById('queue-prog').style.width=pct+'%';
+  document.getElementById('queue-bar').style.display='block';
+
+  try{
+    const text=await file.text();
+    const det=extractDateFromFile(text,file.name,file);
+    const evs=parseVTT(text);
+    const ana=analyseVTT(evs,YOUR_EMAIL,SILENCE_THRESHOLD);
+    if(!ana||!ana.participants.length){
+      // Auto-log with no students if analysis fails
+      document.getElementById('queue-status').textContent=`Skipped (no speech data): ${file.name}`;
+      setTimeout(processVttQueue,400);
+      return;
+    }
+    const sn=subjFromFn(file.name);
+    // Resolve subject: match filename > last used
+    let subjectId=subjectsCache.find(s=>s.name.toLowerCase()===sn.toLowerCase()||sn.toLowerCase().includes(s.name.toLowerCase()))?.id||lastSubjectId;
+    if(!subjectId){
+      // Can't auto-determine subject — open modal for this one file
+      vttAna={...ana,subjName:sn,filename:file.name,detectedDate:det};
+      vttPassive=[];
+      openMod('vtt-mod');
+      await renderVttRes();
+      document.getElementById('queue-status').textContent=`Paused — confirm subject for: ${file.name}`;
+      // When this modal is submitted, logVttSession will call processVttQueue again
+      vttQueue._paused=true;
+      return;
+    }
+    // Auto-log without opening modal
+    const rate=lastRate||0;
+    if(!rate){
+      // Need rate — open modal for this file
+      vttAna={...ana,subjName:sn,filename:file.name,detectedDate:det};
+      vttPassive=[];
+      openMod('vtt-mod');
+      await renderVttRes();
+      document.getElementById('queue-status').textContent=`Paused — enter rate for: ${file.name}`;
+      return;
+    }
+    const sessName=await nextSessionName(subjectId);
+    const perAmt=Math.round((ana.T_charge_min/60)*rate);
+    // Resolve participant names
+    const nmData=(await sb.from('name_mappings').select('raw_identifier,real_name')).data||[];
+    const nmMap={};nmData.forEach(n=>nmMap[n.raw_identifier]=n.real_name);
+    const{data:sess}=await sb.from('sessions').insert({
+      subject_id:subjectId,session_name:sessName,date:det,filename:file.name,
+      t_meeting_min:ana.T_meeting_min,t_absent_min:ana.T_absent_min,t_charge_min:ana.T_charge_min,
+      rate,total_worth:ana.participants.length*perAmt,notes:null
+    }).select().single();
+    if(sess){
+      pushUndo({table:'sessions',op:'insert',id:sess.id});
+      for(const raw of ana.participants){
+        const rn=nmMap[raw]||raw;
+        const sId=await upsertStudent(rn,raw.includes('@')?raw:null);
+        await sb.from('session_students').insert({session_id:sess.id,student_id:sId,student_type:'live',amount:perAmt,paid:false});
+      }
+      for(const ap of ana.absentPeriods)
+        await sb.from('absence_periods').insert({session_id:sess.id,from_ts:ap.fromTs,to_ts:ap.toTs,duration_min:ap.durMin,talkers:ap.talkers.join(', ')});
+      await recalcTotal(sess.id);
+      lastSubjectId=subjectId;
+    }
+  }catch(e){
+    document.getElementById('queue-status').textContent=`Error on ${file.name}: ${e.message}`;
+  }
+  document.getElementById('queue-prog').style.width=Math.round(done_count/total*100)+'%';
+  setTimeout(processVttQueue,300); // small delay to keep UI responsive
+}
+
 async function logVttSession(){
   const a=vttAna; if(!a)return;
   const rate=parseFloat(document.getElementById('vtt-rate').value); if(!rate){toast('Enter a rate per hour');return;}
@@ -1163,6 +1326,7 @@ async function logVttSession(){
     rate,total_worth:(a.participants.length+vttPassive.length)*perAmt,notes:null
   }).select().single();
   pushUndo({table:'sessions',op:'insert',id:sess.id});
+  lastSubjectId=subjectId; lastRate=rate; // remember for next session
   for(const raw of a.participants){
     const rn=nmMap[raw]||raw;
     const sId=await upsertStudent(rn,raw.includes('@')?raw:null);
@@ -1178,7 +1342,14 @@ async function logVttSession(){
   for(const ap of a.absentPeriods) await sb.from('absence_periods').insert({session_id:sess.id,from_ts:ap.fromTs,to_ts:ap.toTs,duration_min:ap.durMin,talkers:ap.talkers.join(', ')});
   await recalcTotal(sess.id);
   closeMod('vtt-mod');resetVtt();
-  loadLedger();loadStudents();loadSubjectsTab();loadHeaderStats();
+  lastSubjectId=subjectId; lastRate=rate;
+  if(vttQueueRunning||vttQueue.length){
+    // Continue processing queue
+    processVttQueue._done=(processVttQueue._done||0)+1;
+    setTimeout(processVttQueue,300);
+  } else {
+    loadLedger();loadStudents();loadSubjectsTab();loadHeaderStats();
+  }
   toast(`Session "${sessName}" logged ✓ — ${egp((a.participants.length+vttPassive.length)*perAmt)}`);
 }
 
@@ -1192,7 +1363,13 @@ function openMod(id){
     manualStus=[]; document.getElementById('m-stus').innerHTML=''; document.getElementById('m-preview').innerHTML='';
     autoFillManualName();
   }
-  if(id==='vtt-mod') document.getElementById('vtt-subj').innerHTML=`<option value="">Auto-detect from filename</option>`+subjectsCache.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
+  if(id==='vtt-mod'){
+    document.getElementById('vtt-subj').innerHTML=`<option value="">Auto-detect from filename</option>`+subjectsCache.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
+    // Restore last used subject
+    if(lastSubjectId){document.getElementById('vtt-subj').value=lastSubjectId;}
+    // Restore last used rate
+    if(lastRate){document.getElementById('vtt-rate').value=lastRate;}
+  }
   if(id==='excel-mod') document.getElementById('xl-subj').innerHTML=subjectsCache.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
   document.getElementById(id).classList.add('on');
 }
@@ -1337,40 +1514,185 @@ async function doExcelImport(){
   const subjectId=parseInt(document.getElementById('xl-subj').value);
   if(!subjectId){toast('Select a subject');return;}
   const{rows,detectedDate}=excelData;
-  let stuImp=0,sessImp=0;
+  const progEl=document.getElementById('xl-dz-t');
+  progEl.textContent='Step 1/4: Scanning columns…';
+
   const headerRow=rows[0]||[];
   const totalCol=headerRow.findIndex(h=>h&&String(h).toLowerCase()==='total');
   const paidCol=headerRow.findIndex(h=>h&&String(h).toLowerCase().includes('paid'));
   const endCol=totalCol>-1?totalCol:headerRow.length;
 
+  // Collect session columns that have real data
+  const sessionLabels=[];
+  for(let ci=1;ci<endCol;ci++){
+    const lbl=headerRow[ci]!=null?String(headerRow[ci]):`Session ${ci}`;
+    if(rows.slice(1).some(r=>r&&parseFloat(r[ci])>0))
+      sessionLabels.push({ci,label:lbl,noteKey:`imported:${lbl}`});
+  }
+  if(!sessionLabels.length){toast('No session columns found in this sheet');return;}
+  progEl.textContent=`Step 2/4: Creating ${sessionLabels.length} sessions…`;
+
+  // Fetch existing sessions for this subject in one query
+  const{data:existing}=await sb.from('sessions').select('id,notes,session_name').eq('subject_id',subjectId);
+  const existMap={};
+  (existing||[]).forEach(s=>{if(s.notes)existMap[s.notes]=s.id;});
+
+  // Build list of sessions to create (only ones that dont exist yet)
+  const subjObj=subjectsCache.find(s=>s.id===subjectId);
+  const prefix=subjObj?subjObj.name.replace(/\s+/g,'_'):'Session';
+  // Count existing imported sessions to continue numbering
+  const existingImported=(existing||[]).filter(s=>s.notes&&s.notes.startsWith('imported:')).length;
+  let sessCounter=existingImported;
+  const sessMap={};
+  const toCreate=[];
+  for(const{noteKey}of sessionLabels){
+    if(existMap[noteKey]){sessMap[noteKey]=existMap[noteKey];}
+    else{sessCounter++;toCreate.push({subject_id:subjectId,session_name:`${prefix}_${String(sessCounter).padStart(2,'0')}`,date:detectedDate,t_meeting_min:0,t_absent_min:0,t_charge_min:0,rate:0,total_worth:0,notes:noteKey});}
+  }
+  // Insert new sessions in ONE batch call
+  if(toCreate.length){
+    const{data:created,error:ce}=await sb.from('sessions').insert(toCreate).select('id,notes');
+    if(ce){toast('Error creating sessions: '+ce.message);return;}
+    (created||[]).forEach(s=>{if(s.notes)sessMap[s.notes]=s.id;});
+  }
+
+  progEl.textContent=`Step 3/4: Upserting students…`;
+  // Collect unique student names
+  const studentNames=[...new Set(
+    rows.slice(1).filter(r=>r&&r[0]&&String(r[0]).trim()&&String(r[0]).toUpperCase()!=='TOTAL').map(r=>String(r[0]).trim())
+  )];
+  // Batch-upsert all students at once via insert with ignoreDuplicates
+  const stuInserts=studentNames.map(n=>({name:n,default_rate:0}));
+  await sb.from('students').upsert(stuInserts,{onConflict:'name',ignoreDuplicates:true});
+  // Fetch all student ids in one query
+  const{data:stuData}=await sb.from('students').select('id,name').in('name',studentNames);
+  const stuMap={};(stuData||[]).forEach(s=>stuMap[s.name]=s.id);
+
+  progEl.textContent=`Step 4/4: Saving ${sessionLabels.length * studentNames.length} entries…`;
+  // Build all session_student rows
+  const ssRows=[];
   for(let ri=1;ri<rows.length;ri++){
     const row=rows[ri]; if(!row||!row[0])continue;
     const nmStr=String(row[0]).trim(); if(!nmStr||nmStr.toUpperCase()==='TOTAL')continue;
     const total=totalCol>-1?parseFloat(row[totalCol])||0:0;
     const totalPaid=paidCol>-1?parseFloat(row[paidCol])||0:0;
     const paid=total>0&&totalPaid>=total;
-    for(let ci=1;ci<endCol;ci++){
+    const stuId=stuMap[nmStr]; if(!stuId)continue;
+    for(const{ci,noteKey}of sessionLabels){
       const amt=parseFloat(row[ci]); if(!amt||isNaN(amt))continue;
-      const label=headerRow[ci]!=null?String(headerRow[ci]):`Session ${ci}`;
-      const noteKey=`imported:${label}`;
-      const{data:ex}=await sb.from('sessions').select('id').eq('subject_id',subjectId).eq('notes',noteKey).maybeSingle();
-      let sessId;
-      if(ex){sessId=ex.id;}else{
-        // Auto-name imported sessions
-        const autoName=await nextSessionName(subjectId);
-        const{data:ns}=await sb.from('sessions').insert({subject_id:subjectId,session_name:autoName,date:detectedDate,t_meeting_min:0,t_absent_min:0,t_charge_min:0,rate:0,total_worth:0,notes:noteKey}).select().single();
-        sessId=ns.id; sessImp++;
-      }
-      const sId=await upsertStudent(nmStr);
-      await sb.from('session_students').upsert({session_id:sessId,student_id:sId,student_type:'live',amount:amt,paid},{onConflict:'session_id,student_id'});
-      stuImp++;
+      const sessId=sessMap[noteKey]; if(!sessId)continue;
+      ssRows.push({session_id:sessId,student_id:stuId,student_type:'live',amount:amt,paid});
     }
   }
-  const{data:sjs}=await sb.from('sessions').select('id').eq('subject_id',subjectId);
-  for(const s of(sjs||[]))await recalcTotal(s.id);
+  // Upsert session_students in chunks of 200
+  for(let i=0;i<ssRows.length;i+=200){
+    const{error:sse}=await sb.from('session_students').upsert(ssRows.slice(i,i+200),{onConflict:'session_id,student_id'});
+    if(sse){toast('Error saving students: '+sse.message);return;}
+    progEl.textContent=`Saving… ${Math.min(i+200,ssRows.length)}/${ssRows.length}`;
+  }
+
+  // Recalc totals in one pass
+  const affectedIds=[...new Set(Object.values(sessMap))];
+  if(affectedIds.length){
+    const{data:allSS}=await sb.from('session_students').select('session_id,amount').in('session_id',affectedIds);
+    const totMap={};
+    (allSS||[]).forEach(r=>{totMap[r.session_id]=(totMap[r.session_id]||0)+(r.amount||0);});
+    // Batch update totals
+    for(const[id,tw]of Object.entries(totMap))
+      await sb.from('sessions').update({total_worth:tw}).eq('id',parseInt(id));
+  }
+
   closeMod('excel-mod');
   loadLedger();loadStudents();loadSubjectsTab();loadHeaderStats();
-  toast(`Import done: ${stuImp} entries, ${sessImp} sessions ✓`);
+  toast(`Import done: ${ssRows.length} entries across ${affectedIds.length} sessions ✓`);
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// BATCH VTT PROCESSOR
+// ══════════════════════════════════════════════════════════════════════════════
+let batchFiles=[];
+
+function handleBatchDrop(e){
+  e.preventDefault();document.getElementById('batch-dz').classList.remove('over');
+  handleBatchFiles(e.dataTransfer.files);
+}
+
+function handleBatchFiles(files){
+  batchFiles=[...files].filter(f=>f.name.toLowerCase().endsWith('.vtt'));
+  if(!batchFiles.length){toast('No .vtt files found');return;}
+  document.getElementById('batch-queue').style.display='block';
+  document.getElementById('batch-subj').innerHTML=subjectsCache.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
+  if(lastSubjectId)document.getElementById('batch-subj').value=lastSubjectId;
+  if(lastRate)document.getElementById('batch-rate').value=lastRate;
+  renderBatchList();
+}
+
+function renderBatchList(){
+  document.getElementById('batch-list').innerHTML=batchFiles.map((f,i)=>`
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--bg3);border-radius:var(--r);margin-bottom:4px" id="bfi-${i}">
+      <span style="font:400 12px/1 var(--mono);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(f.name)}</span>
+      <span style="font:400 11px/1 var(--mono);color:var(--tx3)" id="bst-${i}">waiting…</span>
+    </div>`).join('');
+}
+
+function clearBatch(){
+  batchFiles=[];
+  document.getElementById('batch-queue').style.display='none';
+  document.getElementById('batch-list').innerHTML='';
+  document.getElementById('batch-fi').value='';
+}
+
+async function runBatch(){
+  const subjectId=parseInt(document.getElementById('batch-subj').value);
+  const rate=parseFloat(document.getElementById('batch-rate').value)||0;
+  if(!subjectId||!rate){toast('Select subject and enter rate first');return;}
+  lastSubjectId=subjectId; lastRate=rate;
+  
+  const btn=document.querySelector('[onclick="runBatch()"]');
+  btn.disabled=true; btn.textContent='Processing…';
+  
+  let done=0, errs=0;
+  for(let i=0;i<batchFiles.length;i++){
+    const f=batchFiles[i];
+    const stEl=document.getElementById('bst-'+i);
+    const rowEl=document.getElementById('bfi-'+i);
+    stEl.textContent='processing…'; stEl.style.color='var(--amber)';
+    try{
+      const text=await f.text();
+      const det=extractDateFromFile(text,f.name,f);
+      const evs=parseVTT(text);
+      const ana=analyseVTT(evs,YOUR_EMAIL,SILENCE_THRESHOLD);
+      if(!ana){stEl.textContent='⚠ no speech';stEl.style.color='var(--coral)';errs++;continue;}
+      // Resolve participant names
+      const{data:nmData}=await sb.from('name_mappings').select('raw_identifier,real_name');
+      const nmMap={};(nmData||[]).forEach(n=>nmMap[n.raw_identifier]=n.real_name);
+      const sessName=await nextSessionName(subjectId);
+      const perAmt=Math.round((ana.T_charge_min/60)*rate);
+      const{data:sess}=await sb.from('sessions').insert({
+        subject_id:subjectId,session_name:sessName,date:det,filename:f.name,
+        t_meeting_min:ana.T_meeting_min,t_absent_min:ana.T_absent_min,t_charge_min:ana.T_charge_min,
+        rate,total_worth:ana.participants.length*perAmt,notes:null
+      }).select().single();
+      for(const raw of ana.participants){
+        const rn=nmMap[raw]||raw;
+        const sId=await upsertStudent(rn,raw.includes('@')?raw:null);
+        await sb.from('session_students').insert({session_id:sess.id,student_id:sId,student_type:'live',amount:perAmt,paid:false});
+        await sb.from('rate_mappings').upsert({student_id:sId,subject_id:subjectId,rate},{onConflict:'student_id,subject_id'});
+      }
+      for(const ap of ana.absentPeriods) await sb.from('absence_periods').insert({session_id:sess.id,from_ts:ap.fromTs,to_ts:ap.toTs,duration_min:ap.durMin,talkers:ap.talkers.join(', ')});
+      await recalcTotal(sess.id);
+      stEl.textContent=`✓ ${sessName} (${det})`;stEl.style.color='var(--teal)';
+      rowEl.style.background='var(--tbg)';
+      done++;
+    }catch(e){
+      stEl.textContent='✗ error';stEl.style.color='var(--coral)';
+      console.error(f.name,e); errs++;
+    }
+    document.getElementById('batch-status').textContent=`${done}/${batchFiles.length} done${errs?' — '+errs+' errors':''}`;
+  }
+  btn.disabled=false; btn.textContent='⚡ Process All';
+  loadLedger();loadStudents();loadSubjectsTab();loadHeaderStats();
+  toast(`Batch done: ${done} sessions logged${errs?' ('+errs+' errors)':' ✓'}`);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
