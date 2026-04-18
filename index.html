@@ -349,7 +349,12 @@ create policy "all" on app_settings for all using(true) with check(true);</div>
 
   <!-- TAB: ENTRY -->
   <div class="pg on" id="pg-entry">
-    <div class="ptitle">Add Data <button class="btn btn-g btn-sm" onclick="undoLast()">↩ Undo</button></div>
+    <div class="ptitle">Add Data
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-t btn-sm" onclick="startWatchFolder()" title="Pick folder and scan for new VTTs now">📂 Scan for VTTs</button>
+        <button class="btn btn-g btn-sm" onclick="undoLast()">↩ Undo</button>
+      </div>
+    </div>
     <div class="egrid">
       <div class="ec" id="dz-card"
         ondragover="event.preventDefault();this.classList.add('over')"
@@ -477,6 +482,32 @@ create policy "all" on app_settings for all using(true) with check(true);</div>
         </div>
         <button class="btn btn-p" onclick="createSubject()">+ Create Subject</button>
         <div id="subj-list-sm" style="margin-top:10px;font:400 11px/1.7 var(--mono);color:var(--tx3)"></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-h" style="cursor:default"><span style="font-size:16px;font-weight:700">Watch Folder (TutorSync)</span></div>
+      <div class="card-b">
+        <div style="font:400 12px/1.6 var(--mono);color:var(--tx2);margin-bottom:12px">
+          Set this to the same folder TutorSync downloads VTTs into.<br/>
+          When the app is open and a new VTT appears there, it processes automatically.
+        </div>
+        <div class="fld"><label>Folder path (paste from Windows Explorer)</label>
+          <input class="inp" id="s-watchfolder" placeholder="C:\Users\Anas\Downloads\TutorVTTs"/>
+        </div>
+        <button class="btn btn-p" onclick="saveWatchFolder()">Save Watch Folder</button>
+        <div id="watch-status" style="font:400 11px/1 var(--mono);color:var(--teal);margin-top:8px;display:none">✓ Saved — the app will check this folder every 60 seconds while open</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-h" style="cursor:default"><span style="font-size:16px;font-weight:700">Subject → Rate Map</span></div>
+      <div class="card-b">
+        <div style="font:400 12px/1.6 var(--mono);color:var(--tx2);margin-bottom:12px">
+          Map subject names to rates. Used for silent auto-processing from watch folder.<br/>
+          Format: one per line, <b>SubjectName = rate</b>
+        </div>
+        <textarea class="inp" id="s-ratemap" rows="6" placeholder="Electronics 2 = 200&#10;AI = 250&#10;Signal = 200&#10;Field = 200" style="font-family:var(--mono);font-size:13px;resize:vertical"></textarea>
+        <button class="btn btn-p" onclick="saveRateMap()" style="margin-top:8px">Save Rate Map</button>
+        <div id="ratemap-status" style="font:400 11px/1 var(--mono);color:var(--teal);margin-top:8px;display:none">✓ Saved</div>
       </div>
     </div>
     <div class="card">
@@ -1027,6 +1058,7 @@ async function loadSettings(){
   document.getElementById('s-thresh').value=SILENCE_THRESHOLD;
   const{data}=await sb.from('subjects').select('id,name').order('name');
   if(data)document.getElementById('subj-list-sm').textContent='Subjects: '+data.map(s=>s.name).join(', ');
+  loadWatchFolderSettings();
 }
 
 async function saveSettings(){
@@ -1264,9 +1296,11 @@ async function processVttQueue(){
       return;
     }
     // Auto-log without opening modal
-    const rate=lastRate||0;
+    // Try rate: lastRate > rate map by subject name > pause for manual entry
+    let rate=lastRate||0;
+    if(!rate)rate=getRateForSubject(sn)||getRateForSubject(a.subjName||'')||0;
     if(!rate){
-      // Need rate — open modal for this file
+      // Still no rate — open modal for this file, pause queue
       vttAna={...ana,subjName:sn,filename:file.name,detectedDate:det};
       vttPassive=[];
       openMod('vtt-mod');
@@ -1747,7 +1781,110 @@ function toast(msg){
 
 document.querySelectorAll('.mo').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)closeMod(o.id);}));
 
+// ══════════════════════════════════════════════════════════════════════════════
+// WATCH FOLDER + RATE MAP (Settings)
+// ══════════════════════════════════════════════════════════════════════════════
+function saveWatchFolder(){
+  const v=document.getElementById('s-watchfolder').value.trim();
+  localStorage.setItem('watch_folder',v);
+  const el=document.getElementById('watch-status');
+  el.style.display='block'; setTimeout(()=>el.style.display='none',3000);
+  toast('Watch folder saved ✓');
+}
+
+function saveRateMap(){
+  const v=document.getElementById('s-ratemap').value.trim();
+  localStorage.setItem('rate_map',v);
+  const el=document.getElementById('ratemap-status');
+  el.style.display='block'; setTimeout(()=>el.style.display='none',3000);
+  toast('Rate map saved ✓');
+}
+
+function getRateForSubject(subjectName){
+  // Check rate_mappings in DB via subjectsCache first, then localStorage rate_map
+  const raw=localStorage.getItem('rate_map')||'';
+  for(const line of raw.split('\n')){
+    const [k,v]=line.split('=').map(s=>s.trim());
+    if(k&&v&&subjectName.toLowerCase().includes(k.toLowerCase()))return parseFloat(v)||null;
+  }
+  return null;
+}
+
+function loadWatchFolderSettings(){
+  const wf=localStorage.getItem('watch_folder')||'';
+  const rm=localStorage.getItem('rate_map')||'';
+  if(wf)document.getElementById('s-watchfolder').value=wf;
+  if(rm)document.getElementById('s-ratemap').value=rm;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// SILENT AUTO-PROCESS from Watch Folder
+// The File System Access API lets us poll a folder the user grants access to.
+// On first use the user clicks once to grant folder access — never again.
+// ══════════════════════════════════════════════════════════════════════════════
+let watchHandle=null, watchSeen=new Set();
+
+async function startWatchFolder(){
+  if(!('showDirectoryPicker' in window)){
+    toast('Watch folder not supported in this browser — use Chrome or Edge');
+    return;
+  }
+  try{
+    watchHandle=await window.showDirectoryPicker({mode:'read'});
+    localStorage.setItem('watch_folder_granted','1');
+    await pollWatchFolder();
+    toast('Watch folder scanned ✓ — click the button any time to check for new files');
+  }catch(e){
+    if(e.name!=='AbortError')toast('Could not open folder: '+e.message);
+  }
+}
+
+async function pollWatchFolder(){
+  if(!watchHandle)return;
+  try{
+    const newFiles=[];
+    for await(const [name,entry] of watchHandle.entries()){
+      if(entry.kind!=='file')continue;
+      if(!name.match(/\.vtt$/i))continue;
+      if(watchSeen.has(name))continue;
+      watchSeen.add(name);
+      const file=await entry.getFile();
+      newFiles.push(file);
+    }
+    if(!newFiles.length)return;
+    // Sort oldest first
+    newFiles.sort((a,b)=>a.lastModified-b.lastModified);
+    if(newFiles.length===1){
+      toast(`New VTT detected: ${newFiles[0].name}`);
+      openMod('vtt-mod');
+      setTimeout(()=>handleVttFile(newFiles[0]),100);
+    } else {
+      toast(`${newFiles.length} new VTT files detected — batch processing…`);
+      handleMultiVtt(newFiles);
+    }
+  }catch(e){
+    // Folder access may have been revoked — silently ignore
+  }
+}
+
+// Auto-start watching if previously granted (re-request on page load)
+async function tryResumeWatch(){
+  // Can't auto-resume without user gesture, but show a button if folder was set before
+  const granted=localStorage.getItem('watch_folder_granted');
+  if(granted){
+    const bar=document.createElement('div');
+    bar.style.cssText='position:fixed;bottom:72px;right:12px;z-index:300;';
+    bar.innerHTML=`<button class="btn btn-t btn-sm" onclick="startWatchFolder()" style="box-shadow:0 4px 16px rgba(0,0,0,.4)">
+      📂 Resume Watch Folder
+    </button>`;
+    document.body.appendChild(bar);
+    // Auto-hide after 8 seconds
+    setTimeout(()=>bar.remove(),8000);
+  }
+}
+
 init();
+tryResumeWatch();
 </script>
 </body>
 </html>
