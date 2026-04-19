@@ -351,7 +351,7 @@ create policy "all" on app_settings for all using(true) with check(true);</div>
   <div class="pg on" id="pg-entry">
     <div class="ptitle">Add Data
       <div style="display:flex;gap:8px">
-        <button class="btn btn-t btn-sm" onclick="startWatchFolder()" title="Pick folder and scan for new VTTs now">📂 Scan for VTTs</button>
+        <button id="scan-btn" class="btn btn-t btn-sm" onclick="selectWatchFolder()" title="Pick a folder to watch for VTT files">📂 Set Folder</button>
         <button class="btn btn-g btn-sm" onclick="undoLast()">↩ Undo</button>
       </div>
     </div>
@@ -1900,20 +1900,55 @@ function loadWatchFolderSettings(){
 // ══════════════════════════════════════════════════════════════════════════════
 let watchHandle=null, watchSeen=new Set();
 
-async function startWatchFolder(){
+// Called once to pick the folder — after that watchHandle is set
+async function selectWatchFolder(){
   if(!('showDirectoryPicker' in window)){
-    toast('Watch folder not supported in this browser — use Chrome or Edge');
+    toast('Use Chrome or Edge on desktop for this feature');
     return;
   }
   try{
     watchHandle=await window.showDirectoryPicker({mode:'read'});
     localStorage.setItem('watch_folder_granted','1');
+    watchSeen.clear(); // reset so all existing files in folder are found
     await pollWatchFolder();
-    toast('Watch folder scanned ✓ — click the button any time to check for new files');
+    // Swap button to scan-only
+    updateWatchBtn();
+    toast('Folder selected ✓ — new VTTs found and queued');
   }catch(e){
     if(e.name!=='AbortError')toast('Could not open folder: '+e.message);
   }
 }
+
+// Called any time after folder is selected — just scans, no picker
+async function scanWatchFolder(){
+  if(!watchHandle){
+    // No handle yet — fall back to selection
+    await selectWatchFolder();
+    return;
+  }
+  const btn=document.getElementById('scan-btn');
+  if(btn){btn.textContent='🔄 Scanning…';btn.disabled=true;}
+  await pollWatchFolder();
+  if(btn){btn.textContent='🔄 Scan Now';btn.disabled=false;}
+  toast('Scan complete ✓');
+}
+
+function updateWatchBtn(){
+  const btn=document.getElementById('scan-btn');
+  if(!btn)return;
+  if(watchHandle){
+    btn.textContent='🔄 Scan Now';
+    btn.title='Scan watch folder for new VTT files';
+    btn.onclick=scanWatchFolder;
+  } else {
+    btn.textContent='📂 Set Folder';
+    btn.title='Pick a folder to watch for VTT files';
+    btn.onclick=selectWatchFolder;
+  }
+}
+
+// Keep startWatchFolder as alias so old references still work
+async function startWatchFolder(){ await selectWatchFolder(); }
 
 async function pollWatchFolder(){
   if(!watchHandle)return;
@@ -1945,17 +1980,19 @@ async function pollWatchFolder(){
 
 // Auto-start watching if previously granted (re-request on page load)
 async function tryResumeWatch(){
-  // Can't auto-resume without user gesture, but show a button if folder was set before
   const granted=localStorage.getItem('watch_folder_granted');
   if(granted){
+    // Update the Entry tab button to show "Scan Now" since folder was previously selected
+    // watchHandle is not persisted across page loads (browser security) — 
+    // so button shows "Set Folder" until they re-select once per session,
+    // then switches to "Scan Now" for the rest of the session.
+    // We show a small reminder banner for 6 seconds.
     const bar=document.createElement('div');
-    bar.style.cssText='position:fixed;bottom:72px;right:12px;z-index:300;';
-    bar.innerHTML=`<button class="btn btn-t btn-sm" onclick="startWatchFolder()" style="box-shadow:0 4px 16px rgba(0,0,0,.4)">
-      📂 Resume Watch Folder
-    </button>`;
+    bar.style.cssText='position:fixed;top:72px;left:50%;transform:translateX(-50%);z-index:300;background:var(--bg3);border:1px solid var(--amber);border-radius:var(--r);padding:10px 16px;font:500 12px/1 var(--mono);color:var(--amber);white-space:nowrap;box-shadow:0 4px 16px rgba(0,0,0,.4);cursor:pointer;';
+    bar.textContent='📂 Tap "Set Folder" once to resume auto-scan';
+    bar.onclick=()=>bar.remove();
     document.body.appendChild(bar);
-    // Auto-hide after 8 seconds
-    setTimeout(()=>bar.remove(),8000);
+    setTimeout(()=>{if(bar.parentNode)bar.remove();},6000);
   }
 }
 
