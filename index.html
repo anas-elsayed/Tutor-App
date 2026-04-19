@@ -847,26 +847,26 @@ async function loadStudents(){
     const rows=stu.session_students||[];
     const owed=rows.filter(r=>!r.paid).reduce((a,r)=>a+(r.amount||0),0);
     const paid=rows.filter(r=>r.paid).reduce((a,r)=>a+(r.amount||0),0);
-    return`<div class="scard">
+    return`<div class="scard" id="stucard-${stu.id}">
     <div class="scard-h" onclick="togSess('s${stu.id}')">
       <div style="flex:1"><div class="scard-subj">${esc(stu.name)}</div>
       <div class="scard-meta">${rows.length} session(s) · collected ${egp(paid)}</div></div>
-      <div>${owed>0?`<div class="scard-total" style="color:var(--coral)">${egp(owed)} owed</div>`:`<span class="badge b-paid">✓ Settled</span>`}</div>
+      <div><div class="scard-hdr-amt" style="font:600 16px/1 var(--mono);color:${owed>0?'var(--coral)':'var(--teal)'}">${owed>0?egp(owed)+' owed':'✓ Settled'}</div></div>
       <span class="chev" id="chev-s${stu.id}">▼</span>
     </div>
     <div class="scard-body" id="sb-s${stu.id}" style="display:none">
-      ${rows.map(r=>`<div class="sl">
+      ${rows.map(r=>`<div class="sl" data-ss-id="${r.id}" data-amount="${r.amount||0}">
         <div class="dot ${r.student_type}"></div>
         <span style="font:400 11px/1 var(--mono);flex:0 0 auto;color:var(--amber);margin-right:4px">${esc(r.sessions?.session_name||'')}</span>
         <span style="font:400 12px/1 var(--mono);flex:1">${esc(r.sessions?.subjects?.name||'?')}</span>
         <span style="font:400 11px/1 var(--mono);color:var(--tx3)">${r.sessions?.date||''}</span>
         <span class="samt">${egp(r.amount||0)}</span>
-        <button class="ptog ${r.paid?'yes':'no'}" onclick="togPaidStu(${r.id},${stu.id})">${r.paid?'✓ Paid':'✕ Unpaid'}</button>
+        <button id="ptog-${r.id}" class="ptog ${r.paid?'yes':'no'}" onclick="togPaidStu(${r.id},${stu.id})">${r.paid?'✓ Paid':'✕ Unpaid'}</button>
       </div>`).join('')}
       <div style="display:flex;justify-content:flex-end;gap:14px;margin-top:8px;font:400 12px/1 var(--mono)">
         <span style="color:var(--tx3)">Total: <b style="color:var(--tx)">${egp(owed+paid)}</b></span>
-        <span style="color:var(--tx3)">Paid: <b style="color:var(--teal)">${egp(paid)}</b></span>
-        <span style="color:var(--tx3)">Owed: <b style="color:var(--coral)">${egp(owed)}</b></span>
+        <span style="color:var(--tx3)">Paid: <b style="color:var(--teal)" class="stu-total-paid">${egp(paid)}</b></span>
+        <span style="color:var(--tx3)">Owed: <b style="color:var(--coral)" class="stu-total-owed">${egp(owed)}</b></span>
       </div>
     </div>
   </div>`;
@@ -874,9 +874,60 @@ async function loadStudents(){
 }
 
 async function togPaidStu(ssId,stuId){
-  const{data}=await sb.from('session_students').select('paid').eq('id',ssId).single();
-  await sb.from('session_students').update({paid:!data.paid}).eq('id',ssId);
-  loadStudents(); loadHeaderStats(); toast('Updated ✓');
+  // 1. Read current state from the button — zero DB round trip
+  const btn=document.getElementById('ptog-'+ssId);
+  const newPaid=!btn.classList.contains('yes');
+
+  // 2. Flip button immediately
+  btn.className='ptog '+(newPaid?'yes':'no');
+  btn.textContent=newPaid?'✓ Paid':'✕ Unpaid';
+
+  // 3. Recalc all totals for this student card from current DOM state
+  const card=document.getElementById('stucard-'+stuId);
+  if(card){
+    const rows=card.querySelectorAll('[data-ss-id]');
+    let owed=0, paid=0;
+    rows.forEach(row=>{
+      const amt=parseFloat(row.dataset.amount)||0;
+      if(row.querySelector('.ptog').classList.contains('yes')) paid+=amt;
+      else owed+=amt;
+    });
+    // Update inner totals
+    const owedEl=card.querySelector('.stu-total-owed');
+    const paidEl=card.querySelector('.stu-total-paid');
+    if(owedEl) owedEl.textContent=egp(owed);
+    if(paidEl) paidEl.textContent=egp(paid);
+    // Update collapsed header (the "X owed" line visible without expanding)
+    const hdrAmt=card.querySelector('.scard-hdr-amt');
+    if(hdrAmt){
+      hdrAmt.style.color=owed>0?'var(--coral)':'var(--teal)';
+      hdrAmt.textContent=owed>0?egp(owed)+' owed':'✓ Settled';
+    }
+    // Update meta line "collected X"
+    const metaEl=card.querySelector('.scard-meta');
+    if(metaEl) metaEl.textContent=`${rows.length} session(s) · collected ${egp(paid)}`;
+  }
+
+  // 4. Update global header stats instantly from DOM — no DB call needed
+  recalcHeaderFromDOM();
+
+  // 5. Persist to DB silently in background
+  sb.from('session_students').update({paid:newPaid}).eq('id',ssId);
+}
+
+function recalcHeaderFromDOM(){
+  // Sum all ptog buttons currently rendered in the students list
+  let owed=0, paid=0;
+  document.querySelectorAll('#students-list [data-ss-id]').forEach(row=>{
+    const amt=parseFloat(row.dataset.amount)||0;
+    if(row.querySelector('.ptog').classList.contains('yes')) paid+=amt;
+    else owed+=amt;
+  });
+  document.getElementById('hdr-owed').textContent=egp(owed);
+  document.getElementById('hdr-paid').textContent=egp(paid);
+  document.getElementById('l-owed').textContent=egp(owed);
+  document.getElementById('l-paid').textContent=egp(paid);
+  document.getElementById('l-earn').textContent=egp(owed+paid);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -1136,9 +1187,17 @@ async function handleVttFile(file){
 }
 
 function subjFromFn(fn){
-  const m=fn.match(/Meeting[_ ]+in[_ ]+__?([^_\.]+?)__?(?:\.vtt)?$/i)||fn.match(/Meeting[_ ]+in[_ ]+(.+?)\.vtt$/i);
+  // Remove the (N) number and date suffix before extracting subject
+  const clean=fn.replace(/\s*\(\d+\)\s*/g,' ').replace(/-\d{8}_\d{6}/g,'').trim();
+  const m=clean.match(/Meeting[_ ]+in[_ ]+__?([^_\.]+?)__?(?:\.vtt)?$/i)||clean.match(/Meeting[_ ]+in[_ ]+(.+?)\.vtt$/i);
   if(m)return m[1].replace(/_/g,' ').trim();
-  return fn.replace(/\.vtt$/i,'').replace(/Meeting[_ ]+in[_ ]*/i,'').replace(/__/g,'').trim();
+  return clean.replace(/\.vtt$/i,'').replace(/Meeting[_ ]+in[_ ]*/i,'').replace(/__/g,'').trim();
+}
+
+// Extract the (N) number from Teams filename: "Meeting in Baher (3).vtt" → 3
+function sessionNumFromFilename(fn){
+  const m=fn.match(/\((\d+)\)/);
+  return m?parseInt(m[1]):null;
 }
 
 function tsToSec(ts){const[h,m,s]=ts.split(':');return+h*3600 + +m*60+parseFloat(s);}
@@ -1197,7 +1256,16 @@ async function renderVttRes(){
   // Auto-fill session name
   const resolvedSubjId=subjectToUse||fnMatch?.id;
   if(resolvedSubjId){
-    const autoName=await nextSessionName(parseInt(resolvedSubjId));
+    // Check if filename has (N) — use that number, else auto-increment
+    const fnNum=sessionNumFromFilename(a.filename||'');
+    let autoName;
+    if(fnNum){
+      const subjObj=subjectsCache.find(s=>s.id===parseInt(resolvedSubjId));
+      const pfx=subjObj?subjObj.name.replace(/\s+/g,'_'):'Session';
+      autoName=`${pfx}_${String(fnNum).padStart(2,'0')}`;
+    } else {
+      autoName=await nextSessionName(parseInt(resolvedSubjId));
+    }
     document.getElementById('vtt-sess-name').value=autoName;
     document.getElementById('vtt-sess-name').placeholder=autoName;
   } else {
@@ -1308,7 +1376,11 @@ async function processVttQueue(){
       document.getElementById('queue-status').textContent=`Paused — enter rate for: ${file.name}`;
       return;
     }
-    const sessName=await nextSessionName(subjectId);
+    // Use (N) from filename if present, else auto-increment
+    const fnNum=sessionNumFromFilename(file.name);
+    const subjObj=subjectsCache.find(s=>s.id===subjectId);
+    const prefix=subjObj?subjObj.name.replace(/\s+/g,'_'):'Session';
+    const sessName=fnNum?`${prefix}_${String(fnNum).padStart(2,'0')}`:await nextSessionName(subjectId);
     const perAmt=Math.round((ana.T_charge_min/60)*rate);
     // Resolve participant names
     const nmData=(await sb.from('name_mappings').select('raw_identifier,real_name')).data||[];
@@ -1700,7 +1772,11 @@ async function runBatch(){
       // Resolve participant names
       const{data:nmData}=await sb.from('name_mappings').select('raw_identifier,real_name');
       const nmMap={};(nmData||[]).forEach(n=>nmMap[n.raw_identifier]=n.real_name);
-      const sessName=await nextSessionName(subjectId);
+      // Use (N) from filename if present, else auto-increment
+    const fnNum=sessionNumFromFilename(file.name);
+    const subjObj=subjectsCache.find(s=>s.id===subjectId);
+    const prefix=subjObj?subjObj.name.replace(/\s+/g,'_'):'Session';
+    const sessName=fnNum?`${prefix}_${String(fnNum).padStart(2,'0')}`:await nextSessionName(subjectId);
       const perAmt=Math.round((ana.T_charge_min/60)*rate);
       const{data:sess}=await sb.from('sessions').insert({
         subject_id:subjectId,session_name:sessName,date:det,filename:f.name,
