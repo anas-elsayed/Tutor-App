@@ -449,6 +449,7 @@ create policy "all" on app_settings for all using(true) with check(true);</div>
       <label>Filter</label>
       <select class="inp" onchange="loadEditTab(this.value)" id="edit-filter">
         <option value="sessions">Sessions (name, date, rate, times)</option>
+        <option value="roster">Session Roster (remove a student from one session)</option>
         <option value="absence">Absence Periods (from, to, duration, talkers)</option>
         <option value="students">Students (name, email, rate)</option>
         <option value="subjects">Subjects (name, term)</option>
@@ -606,16 +607,20 @@ create policy "all" on app_settings for all using(true) with check(true);</div>
     <div id="pass-subj-list"></div>
   </div>
   <div id="pass-step-sess" style="display:none">
-    <div style="font:400 12px/1 var(--mono);color:var(--tx3);margin-bottom:12px">Step 2 — Choose session</div>
+    <div style="font:400 12px/1 var(--mono);color:var(--tx3);margin-bottom:12px">Step 2 — Select one or more sessions this student took</div>
     <div id="pass-sess-list"></div>
-    <button class="btn btn-g btn-sm" onclick="document.getElementById('pass-step-subj').style.display='';document.getElementById('pass-step-sess').style.display='none'" style="margin-top:8px">← Back</button>
+    <div class="brow" style="margin-top:10px">
+      <button class="btn btn-p btn-sm" onclick="passConfirmSessions()" id="pass-continue-btn" disabled>Continue →</button>
+      <button class="btn btn-g btn-sm" onclick="document.getElementById('pass-step-subj').style.display='';document.getElementById('pass-step-sess').style.display='none'">← Back</button>
+    </div>
   </div>
   <div id="pass-step-name" style="display:none">
     <div style="font:400 12px/1 var(--mono);color:var(--tx3);margin-bottom:12px">Step 3 — Student name</div>
+    <div id="pass-sess-summary" style="font:400 12px/1.6 var(--mono);color:var(--tx2);margin-bottom:12px"></div>
     <div class="fld"><label>Student name</label><input class="inp" id="pass-name" placeholder="Name…" onkeydown="if(event.key==='Enter')confirmPassive()"/></div>
-    <div class="fld"><label>Amount (EGP)</label><input class="inp" type="number" id="pass-amt"/></div>
+    <div id="pass-amt-list"></div>
     <div class="brow">
-      <button class="btn btn-p" onclick="confirmPassive()">✓ Add</button>
+      <button class="btn btn-p" onclick="confirmPassive()">✓ Add to all selected sessions</button>
       <button class="btn btn-g" onclick="document.getElementById('pass-step-sess').style.display='';document.getElementById('pass-step-name').style.display='none'">← Back</button>
     </div>
   </div>
@@ -1028,6 +1033,33 @@ async function loadEditTab(type){
     </div>`).join('');
   }
 
+  if(type==='roster'){
+    const{data}=await sb.from('sessions').select('id,session_name,date,subjects(name),session_students(id,amount,paid,student_type,students(id,name))').order('date',{ascending:false});
+    if(!data?.length){el.innerHTML='<div class="empty"><div class="empty-tx">No sessions</div></div>';return;}
+    el.innerHTML=data.map(s=>{
+      const roster=s.session_students||[];
+      if(!roster.length)return''; // skip sessions with no students
+      return`
+      <div class="card" style="margin-bottom:8px">
+        <div class="card-b" style="padding:12px 14px">
+          <div style="margin-bottom:10px">
+            <div style="font:600 13px/1 var(--mono);color:var(--amber);margin-bottom:4px">${esc(s.session_name||'Session')} — ${esc(s.subjects?.name||'?')}</div>
+            <div style="font:400 12px/1 var(--mono);color:var(--tx2)">${s.date} · ${roster.length} student(s)</div>
+          </div>
+          ${roster.map(r=>`
+          <div class="sl" data-ss-id="${r.id}">
+            <div class="dot ${r.student_type}"></div>
+            <span class="sname">${esc(r.students?.name||'Unknown')}</span>
+            <span class="badge b-${r.student_type}">${r.student_type}</span>
+            <span class="samt">${egp(r.amount||0)}</span>
+            <span class="badge b-${r.paid?'paid':'unpaid'}">${r.paid?'paid':'unpaid'}</span>
+            <button class="btn btn-d btn-sm" onclick="delSessionStudent(${r.id},${s.id})" title="Remove this student from this session only — does not delete the student record">✕ Remove from session</button>
+          </div>`).join('')}
+        </div>
+      </div>`;
+    }).join('') || '<div class="empty"><div class="empty-tx">No students in any session yet</div></div>';
+  }
+
   if(type==='absence'){
     const{data}=await sb.from('absence_periods').select('*,sessions(session_name,date,subjects(name))').order('session_id');
     if(!data?.length){el.innerHTML='<div class="empty"><div class="empty-tx">No absence periods</div></div>';return;}
@@ -1099,6 +1131,17 @@ async function delRow(table,id){
   await sb.from(table).delete().eq('id',id);
   toast('Deleted');
   loadLedger();loadStudents();loadSubjectsTab();loadHeaderStats();
+}
+
+// Removes ONE student from ONE session only — the student record itself
+// and all their other sessions remain completely untouched.
+async function delSessionStudent(ssId,sessId){
+  if(!confirm('Remove this student from this session? Their record and other sessions are not affected.'))return;
+  await sb.from('session_students').delete().eq('id',ssId);
+  await recalcTotal(sessId);
+  toast('Removed from session ✓');
+  loadEditTab('roster');
+  loadLedger();loadStudents();loadHeaderStats();
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -1538,7 +1581,7 @@ async function logManualSession(){
 // PASSIVE FLOW
 // ══════════════════════════════════════════════════════════════════════════════
 async function openPassiveFlow(){
-  passiveFlow={};
+  passiveFlow={selectedSessions:[]};
   document.getElementById('pass-step-subj').style.display='';
   document.getElementById('pass-step-sess').style.display='none';
   document.getElementById('pass-step-name').style.display='none';
@@ -1552,39 +1595,77 @@ async function openPassiveFlow(){
 
 async function passPickSubj(subjId,name){
   passiveFlow.subjId=subjId;
+  passiveFlow.selectedSessions=[]; // array of {id,name,amt}
   document.getElementById('pass-step-subj').style.display='none';
   document.getElementById('pass-step-sess').style.display='';
   const{data}=await sb.from('sessions').select('id,date,session_name,t_charge_min,rate').eq('subject_id',subjId).order('date',{ascending:false});
-  document.getElementById('pass-sess-list').innerHTML=(data||[]).map(s=>`
-    <div class="ec" style="flex-direction:row;text-align:left;gap:12px;padding:14px 16px;margin-bottom:8px" onclick="passPickSess(${s.id},${s.rate},${s.t_charge_min})">
-      <div class="ec-icon" style="font-size:24px">📋</div>
+  passiveFlow.allSessions=data||[];
+  document.getElementById('pass-sess-list').innerHTML=(data||[]).map(s=>{
+    const amt=Math.round((s.t_charge_min/60)*s.rate);
+    return`
+    <label class="ec" style="flex-direction:row;text-align:left;gap:12px;padding:14px 16px;margin-bottom:8px;cursor:pointer" for="psess-${s.id}">
+      <input type="checkbox" id="psess-${s.id}" data-sess-id="${s.id}" data-amt="${amt}" onchange="passToggleSession(${s.id},'${esc(s.session_name||'Session')}',${amt})" style="width:20px;height:20px;flex-shrink:0;accent-color:var(--amber)"/>
       <div>
         <div style="font:600 13px/1 var(--mono);color:var(--amber);margin-bottom:3px">${esc(s.session_name||'Session')}</div>
         <div style="font-size:14px;font-weight:600">${s.date}</div>
-        <div style="font:400 11px/1 var(--mono);color:var(--tx3)">per student: ${egp(Math.round((s.t_charge_min/60)*s.rate))}</div>
+        <div style="font:400 11px/1 var(--mono);color:var(--tx2)">per student: ${egp(amt)}</div>
       </div>
-    </div>`).join('')||'<div class="empty"><div class="empty-tx">No sessions for this subject</div></div>';
+    </label>`;
+  }).join('')||'<div class="empty"><div class="empty-tx">No sessions for this subject</div></div>';
+  document.getElementById('pass-continue-btn').disabled=true;
 }
 
-function passPickSess(sessId,rate,tCharge){
-  passiveFlow.sessId=sessId; passiveFlow.amt=Math.round((tCharge/60)*rate);
+function passToggleSession(sessId,name,amt){
+  const checked=document.getElementById('psess-'+sessId).checked;
+  passiveFlow.selectedSessions=passiveFlow.selectedSessions||[];
+  if(checked){
+    if(!passiveFlow.selectedSessions.find(s=>s.id===sessId))
+      passiveFlow.selectedSessions.push({id:sessId,name,amt});
+  } else {
+    passiveFlow.selectedSessions=passiveFlow.selectedSessions.filter(s=>s.id!==sessId);
+  }
+  document.getElementById('pass-continue-btn').disabled=passiveFlow.selectedSessions.length===0;
+  document.getElementById('pass-continue-btn').textContent=
+    passiveFlow.selectedSessions.length>0?`Continue with ${passiveFlow.selectedSessions.length} session(s) →`:'Continue →';
+}
+
+function passConfirmSessions(){
+  if(!passiveFlow.selectedSessions?.length){toast('Select at least one session');return;}
   document.getElementById('pass-step-sess').style.display='none';
   document.getElementById('pass-step-name').style.display='';
-  document.getElementById('pass-amt').value=passiveFlow.amt;
+  document.getElementById('pass-sess-summary').innerHTML=
+    `Adding student to <b style="color:var(--amber)">${passiveFlow.selectedSessions.length}</b> session(s): `+
+    passiveFlow.selectedSessions.map(s=>esc(s.name)).join(', ');
+  // Editable amount per selected session
+  document.getElementById('pass-amt-list').innerHTML=passiveFlow.selectedSessions.map(s=>`
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <span style="font:600 12px/1 var(--mono);color:var(--amber);flex:1">${esc(s.name)}</span>
+      <input type="number" class="inp" value="${s.amt}" id="pamt-${s.id}" style="width:100px;padding:9px 10px;font-size:14px"/>
+      <span style="font:400 11px/1 var(--mono);color:var(--tx2)">EGP</span>
+    </div>`).join('');
   document.getElementById('pass-name').value='';
   setTimeout(()=>document.getElementById('pass-name').focus(),100);
 }
 
 async function confirmPassive(){
-  const nm=document.getElementById('pass-name').value.trim(), amt=parseFloat(document.getElementById('pass-amt').value)||passiveFlow.amt||0;
+  const nm=document.getElementById('pass-name').value.trim();
   if(!nm){toast('Enter a name');return;}
+  if(!passiveFlow.selectedSessions?.length){toast('No sessions selected');return;}
   const sId=await upsertStudent(nm);
-  const{data}=await sb.from('session_students').insert({session_id:passiveFlow.sessId,student_id:sId,student_type:'passive',amount:amt,paid:false}).select().single();
-  pushUndo({table:'session_students',op:'insert',id:data.id});
-  await recalcTotal(passiveFlow.sessId);
+  let added=0;
+  for(const sess of passiveFlow.selectedSessions){
+    const amtEl=document.getElementById('pamt-'+sess.id);
+    const amt=amtEl?parseFloat(amtEl.value)||sess.amt:sess.amt;
+    const{data,error}=await sb.from('session_students').insert({session_id:sess.id,student_id:sId,student_type:'passive',amount:amt,paid:false}).select().single();
+    if(!error&&data){
+      pushUndo({table:'session_students',op:'insert',id:data.id});
+      await recalcTotal(sess.id);
+      added++;
+    }
+  }
   closeMod('passive-mod');
   loadLedger();loadStudents();loadHeaderStats();
-  toast(`${nm} added as passive ✓`);
+  toast(`${nm} added to ${added} session(s) ✓`);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
