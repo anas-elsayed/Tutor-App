@@ -615,12 +615,19 @@ create policy "all" on app_settings for all using(true) with check(true);</div>
     </div>
   </div>
   <div id="pass-step-name" style="display:none">
-    <div style="font:400 12px/1 var(--mono);color:var(--tx3);margin-bottom:12px">Step 3 — Student name</div>
+    <div style="font:400 12px/1 var(--mono);color:var(--tx3);margin-bottom:12px">Step 3 — Add student(s)</div>
     <div id="pass-sess-summary" style="font:400 12px/1.6 var(--mono);color:var(--tx2);margin-bottom:12px"></div>
-    <div class="fld"><label>Student name</label><input class="inp" id="pass-name" placeholder="Name…" onkeydown="if(event.key==='Enter')confirmPassive()"/></div>
+    <div class="fld"><label>Student name</label>
+      <div style="display:flex;gap:8px">
+        <input class="inp" id="pass-name" placeholder="Name… press Enter to add" onkeydown="if(event.key==='Enter'){event.preventDefault();passAddName();}" style="flex:1"/>
+        <button class="btn btn-g btn-sm" onclick="passAddName()">+ Add</button>
+      </div>
+    </div>
+    <div id="pass-names-list" style="margin-bottom:14px"></div>
+    <div class="sec-t" id="pass-amt-title" style="display:none">Per-session amount (applies to every student above)</div>
     <div id="pass-amt-list"></div>
     <div class="brow">
-      <button class="btn btn-p" onclick="confirmPassive()">✓ Add to all selected sessions</button>
+      <button class="btn btn-p" onclick="confirmPassive()">✓ Add all to selected sessions</button>
       <button class="btn btn-g" onclick="document.getElementById('pass-step-sess').style.display='';document.getElementById('pass-step-name').style.display='none'">← Back</button>
     </div>
   </div>
@@ -955,11 +962,24 @@ async function loadSubjectsTab(){
       <div style="padding:12px 16px">
       ${sess.map(s=>{
         const studs=s.session_students||[];
+        const liveCt=studs.filter(r=>r.student_type==='live').length;
+        const passiveCt=studs.filter(r=>r.student_type==='passive').length;
+        const total=studs.length;
+        let countTxt='';
+        if(total>0){
+          if(passiveCt===0){
+            countTxt=` · <b style="color:var(--teal)">${total} student${total===1?'':'s'}</b>`;
+          } else if(liveCt===0){
+            countTxt=` · <b style="color:var(--violet)">${total} student${total===1?'':'s'}</b>`;
+          } else {
+            countTxt=` · <b style="color:var(--blue)">${total} students</b> (<span style="color:var(--teal)">${liveCt}</span>+<span style="color:var(--violet)">${passiveCt}</span>)`;
+          }
+        }
         return`<div style="background:var(--bg2);border:1px solid var(--line);border-radius:var(--r);margin-bottom:8px;overflow:hidden">
           <div style="padding:11px 14px;cursor:pointer;display:flex;justify-content:space-between;align-items:center" onclick="togSess('ss${s.id}')">
             <div>
               <div style="font:600 13px/1 var(--mono);color:var(--amber);margin-bottom:3px">${esc(s.session_name||'Session')}</div>
-              <div style="font:400 12px/1 var(--mono);color:var(--tx3)">${s.date} · ${s.t_charge_min}m · ${s.rate} EGP/hr</div>
+              <div style="font:400 12px/1 var(--mono);color:var(--tx3)">${s.date} · ${s.t_charge_min}m · ${s.rate} EGP/hr${countTxt}</div>
             </div>
             <div style="display:flex;align-items:center;gap:8px">
               <span style="font:600 14px/1 var(--mono);color:var(--amber)">${egp(s.total_worth||0)}</span>
@@ -1581,7 +1601,7 @@ async function logManualSession(){
 // PASSIVE FLOW
 // ══════════════════════════════════════════════════════════════════════════════
 async function openPassiveFlow(){
-  passiveFlow={selectedSessions:[]};
+  passiveFlow={selectedSessions:[],names:[]};
   document.getElementById('pass-step-subj').style.display='';
   document.getElementById('pass-step-sess').style.display='none';
   document.getElementById('pass-step-name').style.display='none';
@@ -1631,12 +1651,14 @@ function passToggleSession(sessId,name,amt){
 
 function passConfirmSessions(){
   if(!passiveFlow.selectedSessions?.length){toast('Select at least one session');return;}
+  passiveFlow.names=[];
   document.getElementById('pass-step-sess').style.display='none';
   document.getElementById('pass-step-name').style.display='';
   document.getElementById('pass-sess-summary').innerHTML=
-    `Adding student to <b style="color:var(--amber)">${passiveFlow.selectedSessions.length}</b> session(s): `+
+    `Sessions selected: <b style="color:var(--amber)">${passiveFlow.selectedSessions.length}</b> — `+
     passiveFlow.selectedSessions.map(s=>esc(s.name)).join(', ');
-  // Editable amount per selected session
+  // Editable amount per selected session — shared across all students added in this batch
+  document.getElementById('pass-amt-title').style.display='block';
   document.getElementById('pass-amt-list').innerHTML=passiveFlow.selectedSessions.map(s=>`
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
       <span style="font:600 12px/1 var(--mono);color:var(--amber);flex:1">${esc(s.name)}</span>
@@ -1644,28 +1666,71 @@ function passConfirmSessions(){
       <span style="font:400 11px/1 var(--mono);color:var(--tx2)">EGP</span>
     </div>`).join('');
   document.getElementById('pass-name').value='';
+  passRenderNames();
   setTimeout(()=>document.getElementById('pass-name').focus(),100);
 }
 
+function passAddName(){
+  const inp=document.getElementById('pass-name');
+  const nm=inp.value.trim();
+  if(!nm)return;
+  if(passiveFlow.names.some(n=>n.toLowerCase()===nm.toLowerCase())){
+    toast('Already added');inp.value='';return;
+  }
+  passiveFlow.names.push(nm);
+  inp.value='';
+  passRenderNames();
+  inp.focus();
+}
+
+function passRemoveName(idx){
+  passiveFlow.names.splice(idx,1);
+  passRenderNames();
+}
+
+function passRenderNames(){
+  const el=document.getElementById('pass-names-list');
+  if(!passiveFlow.names.length){
+    el.innerHTML='<div style="font:400 12px/1.5 var(--mono);color:var(--tx3)">No students added yet — type a name above and press Enter</div>';
+    return;
+  }
+  el.innerHTML=passiveFlow.names.map((nm,i)=>`
+    <div class="sl">
+      <div class="dot passive"></div>
+      <span class="sname">${esc(nm)}</span>
+      <button class="btn btn-d btn-sm" onclick="passRemoveName(${i})">✕</button>
+    </div>`).join('');
+}
+
 async function confirmPassive(){
-  const nm=document.getElementById('pass-name').value.trim();
-  if(!nm){toast('Enter a name');return;}
+  // Pick up any name still sitting in the input box that wasn't explicitly added
+  const pending=document.getElementById('pass-name').value.trim();
+  if(pending && !passiveFlow.names.some(n=>n.toLowerCase()===pending.toLowerCase())){
+    passiveFlow.names.push(pending);
+    document.getElementById('pass-name').value='';
+  }
+  if(!passiveFlow.names?.length){toast('Add at least one student name');return;}
   if(!passiveFlow.selectedSessions?.length){toast('No sessions selected');return;}
-  const sId=await upsertStudent(nm);
-  let added=0;
-  for(const sess of passiveFlow.selectedSessions){
-    const amtEl=document.getElementById('pamt-'+sess.id);
-    const amt=amtEl?parseFloat(amtEl.value)||sess.amt:sess.amt;
-    const{data,error}=await sb.from('session_students').insert({session_id:sess.id,student_id:sId,student_type:'passive',amount:amt,paid:false}).select().single();
-    if(!error&&data){
-      pushUndo({table:'session_students',op:'insert',id:data.id});
-      await recalcTotal(sess.id);
-      added++;
+
+  let totalAdded=0;
+  for(const nm of passiveFlow.names){
+    const sId=await upsertStudent(nm);
+    for(const sess of passiveFlow.selectedSessions){
+      const amtEl=document.getElementById('pamt-'+sess.id);
+      const amt=amtEl?parseFloat(amtEl.value)||sess.amt:sess.amt;
+      const{data,error}=await sb.from('session_students').insert({session_id:sess.id,student_id:sId,student_type:'passive',amount:amt,paid:false}).select().single();
+      if(!error&&data){
+        pushUndo({table:'session_students',op:'insert',id:data.id});
+        totalAdded++;
+      }
     }
   }
+  // Recalc totals once per session at the end
+  for(const sess of passiveFlow.selectedSessions) await recalcTotal(sess.id);
+
   closeMod('passive-mod');
   loadLedger();loadStudents();loadHeaderStats();
-  toast(`${nm} added to ${added} session(s) ✓`);
+  toast(`${passiveFlow.names.length} student(s) added to ${passiveFlow.selectedSessions.length} session(s) — ${totalAdded} entries ✓`);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
