@@ -424,18 +424,58 @@ create policy "all" on app_settings for all using(true) with check(true);</div>
       <div class="sc paid"><div class="sc-lbl">Collected</div><div class="sc-val" id="l-paid">—</div></div>
       <div class="sc earn"><div class="sc-lbl">Total earned</div><div class="sc-val" id="l-earn">—</div></div>
     </div>
+    <div class="fld" style="max-width:280px">
+      <label>Sort by</label>
+      <select class="inp" id="ledger-sort" onchange="renderLedgerList()">
+        <option value="date_desc">Date (newest first)</option>
+        <option value="date_asc">Date (oldest first)</option>
+        <option value="name_asc">Session Name (A→Z)</option>
+        <option value="subject_asc">Subject (A→Z)</option>
+        <option value="duration_desc">Duration (longest first)</option>
+        <option value="amount_desc">Amount (highest first)</option>
+      </select>
+    </div>
     <div id="ledger-list"><div class="loading">Loading…</div></div>
   </div>
 
   <!-- TAB: STUDENTS -->
   <div class="pg" id="pg-students">
     <div class="ptitle">Students</div>
+    <div class="fld" style="max-width:280px">
+      <label>Sort by</label>
+      <select class="inp" id="students-sort" onchange="renderStudentsList()">
+        <option value="name_asc">Name (A→Z)</option>
+        <option value="name_desc">Name (Z→A)</option>
+        <option value="owed_desc">Owed (highest first)</option>
+        <option value="paid_desc">Paid (highest first)</option>
+        <option value="sessions_desc">Session count (most first)</option>
+      </select>
+    </div>
     <div id="students-list"><div class="loading">Loading…</div></div>
   </div>
 
   <!-- TAB: SUBJECTS -->
   <div class="pg" id="pg-subjects">
     <div class="ptitle">Subjects</div>
+    <div class="frow">
+      <div class="fld">
+        <label>Sort subjects by</label>
+        <select class="inp" id="subj-sort" onchange="renderSubjectsList()">
+          <option value="name_asc">Name (A→Z)</option>
+          <option value="total_desc">Total earned (highest)</option>
+          <option value="sessions_desc">Session count (most)</option>
+        </select>
+      </div>
+      <div class="fld">
+        <label>Sort sessions by</label>
+        <select class="inp" id="subj-sess-sort" onchange="renderSubjectsList()">
+          <option value="date_desc">Date (newest first)</option>
+          <option value="date_asc">Date (oldest first)</option>
+          <option value="name_asc">Session Name (A→Z)</option>
+          <option value="duration_desc">Duration (longest first)</option>
+        </select>
+      </div>
+    </div>
     <div id="subjects-list"><div class="loading">Loading…</div></div>
   </div>
 
@@ -757,14 +797,35 @@ async function loadHeaderStats(){
 // ══════════════════════════════════════════════════════════════════════════════
 // LEDGER
 // ══════════════════════════════════════════════════════════════════════════════
+let ledgerData=[];
+
 async function loadLedger(){
   const el=document.getElementById('ledger-list');
   el.innerHTML='<div class="loading">Loading…</div>';
   const{data}=await sb.from('sessions').select('*,subjects(name),session_students(*,students(name)),absence_periods(*)').order('date',{ascending:false});
-  if(!data?.length){el.innerHTML='<div class="empty"><div class="empty-ic">📋</div><div class="empty-tx">No sessions logged yet</div></div>';document.getElementById('lcount').textContent='';return;}
-  document.getElementById('lcount').textContent=`${data.length} sessions`;
-  el.innerHTML=data.map(s=>renderSessCard(s)).join('');
+  ledgerData=data||[];
+  if(!ledgerData.length){el.innerHTML='<div class="empty"><div class="empty-ic">📋</div><div class="empty-tx">No sessions logged yet</div></div>';document.getElementById('lcount').textContent='';return;}
+  renderLedgerList();
   await loadHeaderStats();
+}
+
+function renderLedgerList(){
+  const el=document.getElementById('ledger-list');
+  if(!ledgerData.length)return;
+  const sortKey=document.getElementById('ledger-sort')?.value||'date_desc';
+  const sorted=[...ledgerData].sort((a,b)=>{
+    switch(sortKey){
+      case 'date_asc': return (a.date||'').localeCompare(b.date||'');
+      case 'date_desc': return (b.date||'').localeCompare(a.date||'');
+      case 'name_asc': return (a.session_name||'').localeCompare(b.session_name||'');
+      case 'subject_asc': return (a.subjects?.name||'').localeCompare(b.subjects?.name||'');
+      case 'duration_desc': return (b.t_charge_min||0)-(a.t_charge_min||0);
+      case 'amount_desc': return (b.total_worth||0)-(a.total_worth||0);
+      default: return 0;
+    }
+  });
+  document.getElementById('lcount').textContent=`${sorted.length} sessions`;
+  el.innerHTML=sorted.map(s=>renderSessCard(s)).join('');
 }
 
 function renderSessCard(s){
@@ -850,15 +911,38 @@ async function delSess(id){
 // ══════════════════════════════════════════════════════════════════════════════
 // STUDENTS
 // ══════════════════════════════════════════════════════════════════════════════
+let studentsData=[];
+
 async function loadStudents(){
   const el=document.getElementById('students-list');
   el.innerHTML='<div class="loading">Loading…</div>';
   const{data}=await sb.from('students').select(`id,name,email,session_students(id,amount,paid,student_type,sessions(id,date,session_name,subjects(name)))`).order('name');
-  if(!data?.length){el.innerHTML='<div class="empty"><div class="empty-ic">👥</div><div class="empty-tx">No students yet</div></div>';return;}
-  el.innerHTML=data.map(stu=>{
+  studentsData=data||[];
+  if(!studentsData.length){el.innerHTML='<div class="empty"><div class="empty-ic">👥</div><div class="empty-tx">No students yet</div></div>';return;}
+  renderStudentsList();
+}
+
+function renderStudentsList(){
+  const el=document.getElementById('students-list');
+  if(!studentsData.length)return;
+  const sortKey=document.getElementById('students-sort')?.value||'name_asc';
+  const withTotals=studentsData.map(stu=>{
     const rows=stu.session_students||[];
     const owed=rows.filter(r=>!r.paid).reduce((a,r)=>a+(r.amount||0),0);
     const paid=rows.filter(r=>r.paid).reduce((a,r)=>a+(r.amount||0),0);
+    return{stu,rows,owed,paid};
+  });
+  withTotals.sort((a,b)=>{
+    switch(sortKey){
+      case 'name_asc': return a.stu.name.localeCompare(b.stu.name);
+      case 'name_desc': return b.stu.name.localeCompare(a.stu.name);
+      case 'owed_desc': return b.owed-a.owed;
+      case 'paid_desc': return b.paid-a.paid;
+      case 'sessions_desc': return b.rows.length-a.rows.length;
+      default: return 0;
+    }
+  });
+  el.innerHTML=withTotals.map(({stu,rows,owed,paid})=>{
     return`<div class="scard" id="stucard-${stu.id}">
     <div class="scard-h" onclick="togSess('s${stu.id}')">
       <div style="flex:1"><div class="scard-subj">${esc(stu.name)}</div>
@@ -867,6 +951,10 @@ async function loadStudents(){
       <span class="chev" id="chev-s${stu.id}">▼</span>
     </div>
     <div class="scard-body" id="sb-s${stu.id}" style="display:none">
+      ${rows.length>1?`<div class="brow" style="margin-bottom:12px">
+        <button class="btn btn-t btn-sm" onclick="markAllStudentPaid(${stu.id},true)">✓ Mark All Paid</button>
+        <button class="btn btn-d btn-sm" onclick="markAllStudentPaid(${stu.id},false)">✕ Mark All Unpaid</button>
+      </div>`:''}
       ${rows.map(r=>`<div class="sl" data-ss-id="${r.id}" data-amount="${r.amount||0}">
         <div class="dot ${r.student_type}"></div>
         <span style="font:400 11px/1 var(--mono);flex:0 0 auto;color:var(--amber);margin-right:4px">${esc(r.sessions?.session_name||'')}</span>
@@ -927,6 +1015,51 @@ async function togPaidStu(ssId,stuId){
   sb.from('session_students').update({paid:newPaid}).eq('id',ssId);
 }
 
+// Bulk action — flip every session for this student to paid or unpaid in one go.
+// Used by students with 20-30+ sessions who pay/settle at the end of the term.
+async function markAllStudentPaid(stuId,paidState){
+  const card=document.getElementById('stucard-'+stuId);
+  if(!card)return;
+  const rows=card.querySelectorAll('[data-ss-id]');
+  if(!rows.length)return;
+
+  const verb=paidState?'paid':'unpaid';
+  if(!confirm(`Mark all ${rows.length} session(s) as ${verb}?`))return;
+
+  const ids=[];
+  rows.forEach(row=>{
+    ids.push(parseInt(row.dataset.ssId));
+    const btn=row.querySelector('.ptog');
+    btn.className='ptog '+(paidState?'yes':'no');
+    btn.textContent=paidState?'✓ Paid':'✕ Unpaid';
+  });
+
+  // Recalc totals for this card from the now-updated DOM
+  let owed=0, paid=0;
+  rows.forEach(row=>{
+    const amt=parseFloat(row.dataset.amount)||0;
+    if(row.querySelector('.ptog').classList.contains('yes')) paid+=amt;
+    else owed+=amt;
+  });
+  const owedEl=card.querySelector('.stu-total-owed');
+  const paidEl=card.querySelector('.stu-total-paid');
+  if(owedEl) owedEl.textContent=egp(owed);
+  if(paidEl) paidEl.textContent=egp(paid);
+  const hdrAmt=card.querySelector('.scard-hdr-amt');
+  if(hdrAmt){
+    hdrAmt.style.color=owed>0?'var(--coral)':'var(--teal)';
+    hdrAmt.textContent=owed>0?egp(owed)+' owed':'✓ Settled';
+  }
+  const metaEl=card.querySelector('.scard-meta');
+  if(metaEl) metaEl.textContent=`${rows.length} session(s) · collected ${egp(paid)}`;
+
+  recalcHeaderFromDOM();
+
+  // One batch DB call instead of one per row
+  await sb.from('session_students').update({paid:paidState}).in('id',ids);
+  toast(`${ids.length} session(s) marked ${verb} ✓`);
+}
+
 function recalcHeaderFromDOM(){
   // Sum all ptog buttons currently rendered in the students list
   let owed=0, paid=0;
@@ -945,13 +1078,47 @@ function recalcHeaderFromDOM(){
 // ══════════════════════════════════════════════════════════════════════════════
 // SUBJECTS
 // ══════════════════════════════════════════════════════════════════════════════
+let subjectsData=[];
+
 async function loadSubjectsTab(){
   const el=document.getElementById('subjects-list');
   el.innerHTML='<div class="loading">Loading…</div>';
   const{data}=await sb.from('subjects').select(`id,name,term,sessions(id,date,rate,t_charge_min,total_worth,session_name,session_students(id,amount,student_type,student_id,students(name)))`).order('name');
-  if(!data?.length){el.innerHTML='<div class="empty"><div class="empty-ic">📚</div><div class="empty-tx">No subjects yet — create one in Settings</div></div>';return;}
-  el.innerHTML=data.map(subj=>{
-    const sess=subj.sessions||[], tot=sess.reduce((a,s)=>a+(s.total_worth||0),0);
+  subjectsData=data||[];
+  if(!subjectsData.length){el.innerHTML='<div class="empty"><div class="empty-ic">📚</div><div class="empty-tx">No subjects yet — create one in Settings</div></div>';return;}
+  renderSubjectsList();
+}
+
+function renderSubjectsList(){
+  const el=document.getElementById('subjects-list');
+  if(!subjectsData.length)return;
+  const subjSortKey=document.getElementById('subj-sort')?.value||'name_asc';
+  const sessSortKey=document.getElementById('subj-sess-sort')?.value||'date_desc';
+
+  const withTotals=subjectsData.map(subj=>{
+    const sess=subj.sessions||[];
+    const tot=sess.reduce((a,s)=>a+(s.total_worth||0),0);
+    return{subj,sess,tot};
+  });
+  withTotals.sort((a,b)=>{
+    switch(subjSortKey){
+      case 'name_asc': return a.subj.name.localeCompare(b.subj.name);
+      case 'total_desc': return b.tot-a.tot;
+      case 'sessions_desc': return b.sess.length-a.sess.length;
+      default: return 0;
+    }
+  });
+
+  el.innerHTML=withTotals.map(({subj,sess,tot})=>{
+    const sortedSess=[...sess].sort((a,b)=>{
+      switch(sessSortKey){
+        case 'date_asc': return (a.date||'').localeCompare(b.date||'');
+        case 'date_desc': return (b.date||'').localeCompare(a.date||'');
+        case 'name_asc': return (a.session_name||'').localeCompare(b.session_name||'');
+        case 'duration_desc': return (b.t_charge_min||0)-(a.t_charge_min||0);
+        default: return 0;
+      }
+    });
     return`<div class="sjcard">
     <div class="sjcard-h" onclick="togSess('sj${subj.id}')">
       <div><div class="sjcard-name">${esc(subj.name)}${subj.term?` <span style="font:400 12px/1 var(--mono);color:var(--tx3)">(${esc(subj.term)})</span>`:''}</div>
@@ -960,7 +1127,7 @@ async function loadSubjectsTab(){
     </div>
     <div style="display:none" id="sb-sj${subj.id}">
       <div style="padding:12px 16px">
-      ${sess.map(s=>{
+      ${sortedSess.map(s=>{
         const studs=s.session_students||[];
         const liveCt=studs.filter(r=>r.student_type==='live').length;
         const passiveCt=studs.filter(r=>r.student_type==='passive').length;
