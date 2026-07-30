@@ -453,11 +453,12 @@ create policy "all" on app_settings for all using(true) with check(true);</div>
         </select>
       </div>
       <div class="fld" style="flex:0 0 auto">
-        <label>Group by college</label>
-        <label style="display:flex;align-items:center;gap:8px;padding:13px 14px;background:var(--bg3);border:1.5px solid var(--line2);border-radius:var(--r);cursor:pointer">
-          <input type="checkbox" id="students-group" checked onchange="renderStudentsList()" style="width:18px;height:18px;accent-color:var(--amber)"/>
-          <span style="font:500 14px/1 var(--sans)">On</span>
-        </label>
+        <label>Group by</label>
+        <select class="inp" id="students-group-by" onchange="renderStudentsList()">
+          <option value="university">University</option>
+          <option value="term">University + Term</option>
+          <option value="none">No grouping</option>
+        </select>
       </div>
     </div>
     <div id="students-list"><div class="loading">Loading…</div></div>
@@ -958,10 +959,10 @@ let studentsData=[];
 async function loadStudents(){
   const el=document.getElementById('students-list');
   el.innerHTML='<div class="loading">Loading…</div>';
-  let{data,error}=await sb.from('students').select(`id,name,email,session_students(id,amount,paid,student_type,sessions(id,date,session_name,subjects(name)))`).order('name');
+  let{data,error}=await sb.from('students').select(`id,name,email,session_students(id,amount,paid,student_type,sessions(id,date,session_name,subjects(name,term,departments(name,universities(name)))))`).order('name');
   if(error){
     // session_name column may not exist — retry without it
-    const r2=await sb.from('students').select(`id,name,email,session_students(id,amount,paid,student_type,sessions(id,date,subjects(name)))`).order('name');
+    const r2=await sb.from('students').select(`id,name,email,session_students(id,amount,paid,student_type,sessions(id,date,subjects(name,term,departments(name,universities(name)))))`).order('name');
     if(r2.error){el.innerHTML='<div class="empty"><div class="empty-ic">⚠️</div><div class="empty-tx" style="color:var(--coral)">'+esc(r2.error.message)+'<br/><br/><span style="color:var(--tx3)">Go to Settings → Check Connection.</span></div></div>';return;}
     data=r2.data;
   }
@@ -972,42 +973,109 @@ async function loadStudents(){
 
 // Detect college from a subject name.
 // "BNU Field" → "BNU", "MTI Parallel" → "MTI", "Electronics" → "Shoubra"
-function collegeFromSubject(subjectName){
-  if(!subjectName)return'Shoubra';
-  const m=subjectName.match(/^([A-Z]{2,5})\b/);
-  return m?m[1]:'Shoubra';
+// Get university from a session_student row using DB data
+function uniFromRow(r){
+  const uni=r.sessions?.subjects?.departments?.universities?.name;
+  if(uni)return uni;
+  // Fallback: parse subject name (handles legacy data)
+  const sn=(r.sessions?.subjects?.name||'').toLowerCase();
+  if(sn.startsWith('bnu'))return'BNU';
+  if(sn.startsWith('giu'))return'GIU';
+  if(sn.startsWith('mti'))return'MTI';
+  return'Private';
 }
 
-// Get all colleges a student belongs to (can be multiple)
-function collegesForStudent(rows){
+// Get term from a session_student row
+function termFromRow(r){
+  return r.sessions?.subjects?.term||r.sessions?.subjects?.departments?.universities?.name||'—';
+}
+
+// Get all universities a student has sessions in
+function unisForStudent(rows){
   const seen=new Set();
-  rows.forEach(r=>{
-    const sn=r.sessions?.subjects?.name||'';
-    seen.add(collegeFromSubject(sn));
-  });
-  return seen.size?[...seen]:['Shoubra'];
+  rows.forEach(r=>seen.add(uniFromRow(r)));
+  return seen.size?[...seen]:['Private'];
 }
 
-// College accent colors for headers
-const COLLEGE_COLORS={
+// University accent colors
+const UNI_COLORS={
   'Shoubra':'var(--amber)',
+  'shoubra_comm':'var(--amber)',
   'BNU':'var(--teal)',
-  'MTI':'var(--violet)',
   'GIU':'var(--blue)',
+  'MTI':'var(--violet)',
+  'Power':'#f97316',
+  'shoubra_power':'#f97316',
+  'Private':'var(--tx2)',
 };
-function collegeColor(name){return COLLEGE_COLORS[name]||'var(--tx2)';}
+function collegeColor(name){
+  if(!name)return'var(--tx2)';
+  const k=Object.keys(UNI_COLORS).find(k=>name.toLowerCase().includes(k.toLowerCase()));
+  return k?UNI_COLORS[k]:'var(--tx2)';
+}
+// Short display name for university
+function uniDisplayName(name){
+  if(!name)return'Other';
+  const n=name.toLowerCase();
+  if(n.includes('shoubra')&&n.includes('power'))return'Power';
+  if(n.includes('shoubra'))return'Shoubra';
+  if(n.includes('bnu'))return'BNU';
+  if(n.includes('giu'))return'GIU';
+  if(n.includes('mti'))return'MTI';
+  return name;
+}
+
+function renderByTerm(students, uniKey, renderCard){
+  // Group students by term within a university section
+  const termGroups={};
+  students.forEach(item=>{
+    const terms=new Set(item.rows.map(r=>termFromRow(r)));
+    terms.forEach(term=>{
+      if(!termGroups[term])termGroups[term]=[];
+      const termRows=item.rows.filter(r=>termFromRow(r)===term);
+      termGroups[term].push({...item,rows:termRows,
+        owed:termRows.filter(r=>!r.paid).reduce((a,r)=>a+(r.amount||0),0),
+        paid:termRows.filter(r=>r.paid).reduce((a,r)=>a+(r.amount||0),0),
+      });
+    });
+  });
+  const termOrder=Object.keys(termGroups).sort().reverse(); // newest term first
+  return termOrder.map(term=>{
+    const g=termGroups[term];
+    const termOwed=g.reduce((a,x)=>a+x.owed,0);
+    const tKey=uniKey+'_t_'+term.replace(/[^a-zA-Z0-9]/g,'_');
+    return`
+    <div style="margin-bottom:6px">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px 10px 20px;
+        background:var(--bg3);border-radius:var(--r);cursor:pointer;margin-bottom:6px"
+        onclick="togSess('col_${tKey}')">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font:600 13px/1 var(--mono);color:var(--tx2)">Term ${esc(term)}</span>
+          <span style="font:400 11px/1 var(--mono);color:var(--tx3)">${g.length} student${g.length===1?'':'s'}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          ${termOwed>0?`<span style="font:600 12px/1 var(--mono);color:var(--coral)">${egp(termOwed)} owed</span>`:'<span style="font:600 11px/1 var(--mono);color:var(--teal)">✓ Settled</span>'}
+          <span class="chev" id="chev-col_${tKey}">▼</span>
+        </div>
+      </div>
+      <div id="sb-col_${tKey}" style="display:none">
+        ${g.map(item=>renderCard(item)).join('')}
+      </div>
+    </div>`;
+  }).join('');
+}
 
 function renderStudentsList(){
   const el=document.getElementById('students-list');
   if(!studentsData.length)return;
   const sortKey=document.getElementById('students-sort')?.value||'name_asc';
-  const groupByCollege=document.getElementById('students-group')?.checked!==false;
+  const groupMode=document.getElementById('students-group-by')?.value||'university';
 
   const withTotals=studentsData.map(stu=>{
     const rows=stu.session_students||[];
     const owed=rows.filter(r=>!r.paid).reduce((a,r)=>a+(r.amount||0),0);
     const paid=rows.filter(r=>r.paid).reduce((a,r)=>a+(r.amount||0),0);
-    const colleges=collegesForStudent(rows);
+    const colleges=unisForStudent(rows);
     return{stu,rows,owed,paid,colleges};
   });
 
@@ -1052,18 +1120,18 @@ ${r.sessions?.session_name?`<span style="font:600 11px/1 var(--mono);flex:0 0 au
   </div>`;
   }
 
-  if(!groupByCollege){
+  if(groupMode==='none'){
     el.innerHTML=withTotals.map(renderCard).join('');
     return;
   }
 
-  // Build college groups — a student can appear in multiple colleges
+  // Build university groups — a student can appear in multiple universities
   const groups={};
   withTotals.forEach(item=>{
-    item.colleges.forEach(col=>{
+    item.colleges.forEach(rawUni=>{
+      const col=uniDisplayName(rawUni);
       if(!groups[col])groups[col]=[];
-      // Only include sessions belonging to this college for mixed students
-      const filteredRows=item.rows.filter(r=>collegeFromSubject(r.sessions?.subjects?.name||'')===col);
+      const filteredRows=item.rows.filter(r=>uniDisplayName(uniFromRow(r))===col);
       groups[col].push({...item, rows:filteredRows,
         owed:filteredRows.filter(r=>!r.paid).reduce((a,r)=>a+(r.amount||0),0),
         paid:filteredRows.filter(r=>r.paid).reduce((a,r)=>a+(r.amount||0),0),
@@ -1071,9 +1139,9 @@ ${r.sessions?.session_name?`<span style="font:600 11px/1 var(--mono);flex:0 0 au
     });
   });
 
-  // Sort college sections: Shoubra first, then alphabetical
-  const order=['Shoubra',...Object.keys(groups).filter(k=>k!=='Shoubra').sort()];
-  const known=['Shoubra','BNU','MTI','GIU'];
+  // Sort: known universities first, then alphabetical
+  const PRIO=['Shoubra','Power','BNU','GIU','MTI','Private'];
+  const order=[...PRIO.filter(k=>groups[k]),...Object.keys(groups).filter(k=>!PRIO.includes(k)).sort()];
 
   let html='';
   order.forEach(col=>{
@@ -1101,7 +1169,7 @@ ${r.sessions?.session_name?`<span style="font:600 11px/1 var(--mono);flex:0 0 au
         </div>
       </div>
       <div id="sb-col_${col}" style="display:none;padding-top:6px">
-        ${g.map(item=>renderCard(item)).join('')}
+        ${groupMode==='term'?renderByTerm(g,col,renderCard):g.map(item=>renderCard(item)).join('')}
       </div>
     </div>`;
   });
