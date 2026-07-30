@@ -1,42 +1,29 @@
-# Deploy TutorApp — Get Your Link in 5 Minutes
+# TutorApp — Permanent Free Link (GitHub Pages)
 
-## Option A: Netlify Drop (easiest — no account needed for temporary link)
-
-1. Go to **https://app.netlify.com/drop**
-2. Drag the entire `tutorapp/` folder onto the page
-3. You get an instant live link like `https://random-name-123.netlify.app`
-4. **To make it permanent:** create a free Netlify account and claim the site
+## Why GitHub Pages?
+- 100% free, forever — no trial, no expiry
+- Your link: https://YOUR_USERNAME.github.io/tutorapp/
+- Works on every device instantly
 
 ---
 
-## Option B: GitHub + Netlify (permanent, auto-updates)
+## Step 1 — Get your permanent link (10 min, one time)
 
-1. Create a free GitHub account at https://github.com
-2. Create a new repository called `tutor-app`
-3. Upload all 4 files: `index.html`, `manifest.json`, `icon-192.png`, `icon-512.png`
-4. Go to https://netlify.com → New site from Git → connect your repo
-5. Deploy — you get `https://your-site-name.netlify.app` permanently
-
----
-
-## Option C: GitHub Pages (also free and permanent)
-
-1. Create GitHub repo (public)
-2. Upload the 4 files to the root
-3. Go to repo Settings → Pages → Source: main branch / root
-4. Your link: `https://yourusername.github.io/tutor-app/`
+1. Go to https://github.com → Sign Up (free)
+2. Click + → New repository → name it exactly: tutorapp → Public → Create
+3. Click Add file → Upload files → drag all 4 files → Commit changes
+4. Settings tab → Pages → Source: Deploy from branch → main / root → Save
+5. Your link: https://YOUR_USERNAME.github.io/tutorapp/
+   (live in ~2 minutes, never expires)
 
 ---
 
-## After deployment: Set up Supabase database
+## Step 2 — Supabase database (5 min)
 
-1. Go to **https://supabase.com** → New project (free tier is enough)
-   - Choose a region close to Egypt (Europe West is good)
-   - Note your project URL and anon key
+1. https://supabase.com → New project → Europe West region
+2. SQL Editor → New query → paste and run:
 
-2. In Supabase → **SQL Editor** → New query → paste and run this SQL:
-
-```sql
+-- PASTE THIS IN SUPABASE SQL EDITOR:
 create table if not exists universities (id bigserial primary key, name text unique not null);
 create table if not exists departments (id bigserial primary key, university_id bigint references universities(id) on delete cascade, name text not null, unique(university_id,name));
 create table if not exists subjects (id bigserial primary key, department_id bigint references departments(id) on delete cascade, name text not null, term text, unique(department_id,name));
@@ -48,7 +35,6 @@ create table if not exists name_mappings (id bigserial primary key, raw_identifi
 create table if not exists rate_mappings (id bigserial primary key, student_id bigint references students(id) on delete cascade, subject_id bigint references subjects(id) on delete cascade, rate numeric not null, unique(student_id,subject_id));
 create table if not exists app_settings (key text primary key, value text not null);
 insert into app_settings(key,value) values('your_email','anas.abdelsamad@feng.bu.edu.eg'),('silence_threshold_sec','180') on conflict(key) do nothing;
-
 alter table universities enable row level security;
 alter table departments enable row level security;
 alter table subjects enable row level security;
@@ -59,7 +45,6 @@ alter table absence_periods enable row level security;
 alter table name_mappings enable row level security;
 alter table rate_mappings enable row level security;
 alter table app_settings enable row level security;
-
 create policy "allow_all" on universities for all using (true) with check (true);
 create policy "allow_all" on departments for all using (true) with check (true);
 create policy "allow_all" on subjects for all using (true) with check (true);
@@ -70,32 +55,22 @@ create policy "allow_all" on absence_periods for all using (true) with check (tr
 create policy "allow_all" on name_mappings for all using (true) with check (true);
 create policy "allow_all" on rate_mappings for all using (true) with check (true);
 create policy "allow_all" on app_settings for all using (true) with check (true);
-```
 
-3. Open your deployed app link
-4. You'll see the setup screen — paste your Supabase URL and anon key
-5. Enter your Teams email → Connect
+3. Project Settings → API → copy Project URL + anon public key
 
 ---
 
-## Install as app icon (Android)
-
-1. Open the link in **Chrome on Android**
-2. Tap the 3-dot menu → "Add to Home screen"
-3. It installs like a native app — full screen, no browser bar
-
-## Install on Windows
-
-1. Open in **Chrome or Edge**
-2. Click the install icon in the address bar (or menu → Install TutorApp)
-3. It appears in your taskbar and Start menu
+## Step 3 — Connect
+Open your GitHub Pages link → setup screen → paste URL + key + your email → Connect
 
 ---
 
-## Your data
+## Install as icon
+Android Chrome: menu → Add to Home screen
+Windows Chrome/Edge: install icon in address bar
 
-All data is stored in your Supabase PostgreSQL database.
-It syncs across all devices automatically.
-The connection credentials are saved in your browser's localStorage.
+---
 
-To view your raw data: Supabase dashboard → Table Editor
+## To update the app
+Upload new index.html to GitHub repo → auto-deploys in 1 min.
+Your Supabase data is never touched by updates.
