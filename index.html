@@ -443,13 +443,23 @@ create policy "all" on app_settings for all using(true) with check(true);</div>
     <div class="ptitle">Students</div>
     <div class="frow" style="align-items:flex-end">
       <div class="fld">
-        <label>Sort by</label>
+        <label>Sort students by</label>
         <select class="inp" id="students-sort" onchange="renderStudentsList()">
           <option value="name_asc">Name (A→Z)</option>
           <option value="name_desc">Name (Z→A)</option>
           <option value="owed_desc">Owed (highest first)</option>
           <option value="paid_desc">Paid (highest first)</option>
           <option value="sessions_desc">Session count (most first)</option>
+        </select>
+      </div>
+      <div class="fld">
+        <label>Sort sessions by</label>
+        <select class="inp" id="sessions-sort" onchange="renderStudentsList()">
+          <option value="date_desc">Date (newest first)</option>
+          <option value="date_asc">Date (oldest first)</option>
+          <option value="name_asc">Session name (A→Z)</option>
+          <option value="amount_desc">Amount (highest first)</option>
+          <option value="unpaid_first">Unpaid first</option>
         </select>
       </div>
       <div class="fld" style="flex:0 0 auto">
@@ -1091,6 +1101,18 @@ function renderStudentsList(){
   });
 
   function renderCard({stu,rows,owed,paid}){
+    // Sort this student's sessions by the selected order
+    const sessSortKey=document.getElementById('sessions-sort')?.value||'date_desc';
+    const sortedRows=[...rows].sort((a,b)=>{
+      switch(sessSortKey){
+        case 'date_asc':  return (a.sessions?.date||'').localeCompare(b.sessions?.date||'');
+        case 'date_desc': return (b.sessions?.date||'').localeCompare(a.sessions?.date||'');
+        case 'name_asc':  return (a.sessions?.session_name||'').localeCompare(b.sessions?.session_name||'');
+        case 'amount_desc': return (b.amount||0)-(a.amount||0);
+        case 'unpaid_first': return (a.paid===b.paid)?0:a.paid?1:-1;
+        default: return 0;
+      }
+    });
     return`<div class="scard" id="stucard-${stu.id}">
     <div class="scard-h" onclick="togSess('s${stu.id}')">
       <div style="flex:1"><div class="scard-subj">${esc(stu.name)}</div>
@@ -1103,7 +1125,7 @@ function renderStudentsList(){
         <button class="btn btn-t btn-sm" onclick="markAllStudentPaid(${stu.id},true)">✓ Mark All Paid</button>
         <button class="btn btn-d btn-sm" onclick="markAllStudentPaid(${stu.id},false)">✕ Mark All Unpaid</button>
       </div>`:''}
-      ${rows.map(r=>`<div class="sl" data-ss-id="${r.id}" data-amount="${r.amount||0}">
+      ${sortedRows.map(r=>`<div class="sl" data-ss-id="${r.id}" data-amount="${r.amount||0}">
         <div class="dot ${r.student_type}"></div>
 ${r.sessions?.session_name?`<span style="font:600 11px/1 var(--mono);flex:0 0 auto;color:var(--amber);margin-right:4px">${esc(r.sessions.session_name)}</span>`:''}
         <span style="font:500 13px/1 var(--sans);flex:1">${esc(r.sessions?.subjects?.name||'?')}</span>
