@@ -340,7 +340,7 @@ create policy "all" on app_settings for all using(true) with check(true);</div>
 
   <div class="tabs">
     <button class="tb on" onclick="goTab('entry')" id="tb-entry"><span class="ic">＋</span>Entry</button>
-    <button class="tb" onclick="goTab('ledger')" id="tb-ledger"><span class="ic">📋</span>Ledger</button>
+    <button class="tb" onclick="goTab('ledger')" id="tb-ledger"><span class="ic">📊</span>Analysis</button>
     <button class="tb" onclick="goTab('students')" id="tb-students"><span class="ic">👥</span>Students</button>
     <button class="tb" onclick="goTab('subjects')" id="tb-subjects"><span class="ic">📚</span>Subjects</button>
     <button class="tb" onclick="goTab('edit')" id="tb-edit"><span class="ic">✏️</span>Edit DB</button>
@@ -418,24 +418,13 @@ create policy "all" on app_settings for all using(true) with check(true);</div>
 
   <!-- TAB: LEDGER -->
   <div class="pg" id="pg-ledger">
-    <div class="ptitle">Ledger <span class="ptitle-sub" id="lcount"></span></div>
+    <div class="ptitle">Analysis</div>
     <div class="stats">
       <div class="sc owed"><div class="sc-lbl">Owed to you</div><div class="sc-val" id="l-owed">—</div></div>
       <div class="sc paid"><div class="sc-lbl">Collected</div><div class="sc-val" id="l-paid">—</div></div>
       <div class="sc earn"><div class="sc-lbl">Total earned</div><div class="sc-val" id="l-earn">—</div></div>
     </div>
-    <div class="fld" style="max-width:280px">
-      <label>Sort by</label>
-      <select class="inp" id="ledger-sort" onchange="renderLedgerList()">
-        <option value="date_desc">Date (newest first)</option>
-        <option value="date_asc">Date (oldest first)</option>
-        <option value="name_asc">Session Name (A→Z)</option>
-        <option value="subject_asc">Subject (A→Z)</option>
-        <option value="duration_desc">Duration (longest first)</option>
-        <option value="amount_desc">Amount (highest first)</option>
-      </select>
-    </div>
-    <div id="ledger-list"><div class="loading">Loading…</div></div>
+    <div id="analysis-list"><div class="loading">Loading…</div></div>
   </div>
 
   <!-- TAB: STUDENTS -->
@@ -624,17 +613,17 @@ create policy "all" on app_settings for all using(true) with check(true);</div>
       <div class="fld"><label>Session Name</label><input class="inp" id="vtt-sess-name" placeholder="e.g. AI_01 (auto-filled)"/></div>
       <div class="fld"><label>Rate (EGP/hr)</label><input class="inp" type="number" id="vtt-rate" placeholder="200" oninput="updateVttPreview()"/></div>
     </div>
-    <div class="frow" style="align-items:flex-end">
+    <div class="frow">
       <div class="fld">
         <label>Billable Duration (min) <span style="font:400 11px/1 var(--mono);color:var(--tx3)">from VTT</span></label>
         <input class="inp" type="number" id="vtt-duration" placeholder="e.g. 120" oninput="updateVttPreview()" style="font-family:var(--mono)"/>
       </div>
-      <div class="fld" style="flex:0 0 auto">
-        <label style="opacity:0">.</label>
-        <button class="btn btn-g btn-sm" style="height:44px;padding:0 14px" onclick="roundVttDuration()" title="Round down to nearest 10 minutes">⬇ Round to 10</button>
-      </div>
     </div>
     <div id="vtt-preview"></div>
+    <button id="vtt-round-btn" onclick="roundVttAmount()" style="display:none;width:100%;margin-top:8px;
+      padding:15px;font:800 16px/1 var(--sans);background:var(--amber);color:#000;
+      border:none;border-radius:var(--r);cursor:pointer;letter-spacing:.04em;
+      box-shadow:0 2px 12px rgba(251,191,36,.4)">⬇ Round</button>
     <div class="ppanel">
       <div class="ppanel-t">🎥 Passive Students (recording only)</div>
       <div id="vtt-plist"></div>
@@ -851,44 +840,97 @@ async function loadHeaderStats(){
 // ══════════════════════════════════════════════════════════════════════════════
 // LEDGER
 // ══════════════════════════════════════════════════════════════════════════════
-let ledgerData=[];
-
 async function loadLedger(){
-  const el=document.getElementById('ledger-list');
+  // loadLedger now loads the Analysis tab
+  const el=document.getElementById('analysis-list');
+  if(!el)return;
   el.innerHTML='<div class="loading">Loading…</div>';
-  const{data,error}=await sb.from('sessions').select('*,subjects(name),session_students(*,students(name)),absence_periods(*)').order('date',{ascending:false});
-  if(error){
-    const isPaused=error.message&&(error.message.includes('503')||error.message.includes('540')||error.message.toLowerCase().includes('paused')||error.message.toLowerCase().includes('failed to fetch'));
-    const msg=isPaused
-      ?'Your Supabase project is paused.<br/>Go to <b>supabase.com</b> → your project → click <b>Restore</b>, then reload this page.<br/><br/>Your data is safe and will come back.'
-      :'Error: '+esc(error.message)+'<br/><br/>Go to Settings → Check Connection.';
-    el.innerHTML='<div class="empty"><div class="empty-ic">⚠️</div><div class="empty-tx">'+msg+'<br/><br/><button class="btn btn-p btn-sm" onclick="location.reload()" style="margin-top:10px">Reload after restoring</button></div></div>';
-    return;
+  // Fetch subjects with full session+payment data
+  const{data,error}=await sb.from('subjects').select(`
+    id,name,term,
+    sessions(id,date,total_worth,session_name,t_charge_min,rate,
+      session_students(id,amount,paid,student_type))
+  `).order('name');
+  if(error){el.innerHTML='<div class="empty"><div class="empty-ic">⚠️</div><div class="empty-tx">'+esc(error.message)+'</div></div>';return;}
+  const subjects=data||[];
+
+  let grandTotal=0,grandPaid=0;
+  const subjStats=subjects.map(subj=>{
+    const sess=subj.sessions||[];
+    const tot=sess.reduce((a,s)=>a+(s.total_worth||0),0);
+    const paid=sess.reduce((a,s)=>a+(s.session_students||[]).filter(r=>r.paid).reduce((b,r)=>b+(r.amount||0),0),0);
+    grandTotal+=tot; grandPaid+=paid;
+    return{subj,sess,tot,paid,owed:tot-paid};
+  }).filter(x=>x.tot>0);
+
+  // Monthly earnings from session dates
+  const monthly={};
+  subjects.forEach(subj=>(subj.sessions||[]).forEach(s=>{
+    if(!s.date)return;
+    const mo=s.date.slice(0,7); // YYYY-MM
+    if(!monthly[mo])monthly[mo]={total:0,paid:0};
+    monthly[mo].total+=(s.total_worth||0);
+    monthly[mo].paid+=(s.session_students||[]).filter(r=>r.paid).reduce((a,r)=>a+(r.amount||0),0);
+  }));
+  const months=Object.keys(monthly).sort().reverse().slice(0,6);
+
+  function bar(paid,total,h='8px'){
+    const pct=total>0?Math.min(100,Math.round(paid/total*100)):0;
+    const done=pct>=100;
+    const color=done?'var(--teal)':pct>60?'var(--amber)':'var(--coral)';
+    return`<div style="height:${h};background:var(--bg3);border-radius:4px;overflow:hidden;margin-top:5px">
+      <div style="height:100%;width:${pct}%;background:${color};transition:width .5s"></div></div>
+    <div style="font:400 10px/1 var(--mono);color:var(--tx3);margin-top:2px">${pct}%${done?' ✓':''}</div>`;
   }
-  ledgerData=data||[];
-  if(!ledgerData.length){el.innerHTML='<div class="empty"><div class="empty-ic">📋</div><div class="empty-tx">No sessions logged yet</div></div>';document.getElementById('lcount').textContent='';return;}
-  renderLedgerList();
+
+  el.innerHTML=`
+    <!-- Subject completion overview -->
+    <div style="font:700 13px/1 var(--mono);color:var(--tx3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px">Subject Collection Status</div>
+    ${subjStats.sort((a,b)=>b.owed-a.owed).map(({subj,tot,paid,owed})=>{
+      const done=owed<=0;
+      return`<div style="background:var(--bg1);border:1px solid ${done?'var(--teal)33':'var(--line)'};border-radius:var(--r);padding:12px 14px;margin-bottom:8px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div style="flex:1">
+            <div style="font:600 14px/1 var(--sans)">${esc(subj.name)}${subj.term?` <span style="font:400 11px/1 var(--mono);color:var(--tx3)">(${esc(subj.term)})</span>`:''}</div>
+            <div style="font:400 11px/1 var(--mono);color:var(--tx3);margin-top:3px">${(subj.sessions||[]).length} sessions</div>
+            ${bar(paid,tot)}
+          </div>
+          <div style="text-align:right;margin-left:14px;flex-shrink:0">
+            <div style="font:600 14px/1 var(--mono);color:var(--amber)">${egp(tot)}</div>
+            <div style="font:400 11px/1 var(--mono);color:var(--teal);margin-top:3px">+${egp(paid)}</div>
+            ${owed>0?`<div style="font:600 11px/1 var(--mono);color:var(--coral);margin-top:2px">${egp(owed)} owed</div>`:
+              `<div style="font:600 11px/1 var(--mono);color:var(--teal);margin-top:2px">✓ Done</div>`}
+          </div>
+        </div>
+      </div>`;
+    }).join('')}
+
+    <!-- Monthly trend -->
+    ${months.length?`
+    <div style="font:700 13px/1 var(--mono);color:var(--tx3);text-transform:uppercase;letter-spacing:.1em;margin:20px 0 10px">Recent Months</div>
+    ${months.map(mo=>{
+      const m=monthly[mo];
+      const label=new Date(mo+'-01').toLocaleString('en',{month:'short',year:'numeric'});
+      return`<div style="background:var(--bg1);border:1px solid var(--line);border-radius:var(--r);padding:10px 14px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">
+        <div><div style="font:600 13px/1 var(--sans)">${label}</div>${bar(m.paid,m.total,'5px')}</div>
+        <div style="text-align:right;margin-left:12px">
+          <div style="font:600 13px/1 var(--mono);color:var(--amber)">${egp(m.total)}</div>
+          <div style="font:400 11px/1 var(--mono);color:var(--teal)">${egp(m.paid)} paid</div>
+          ${m.total-m.paid>0?`<div style="font:400 11px/1 var(--mono);color:var(--coral)">${egp(m.total-m.paid)} owed</div>`:''}
+        </div>
+      </div>`;
+    }).join('')}`:''}
+  `;
+
+  // Update header stats
+  const grandOwed=grandTotal-grandPaid;
+  document.getElementById('l-owed').textContent=egp(grandOwed>0?grandOwed:0);
+  document.getElementById('l-paid').textContent=egp(grandPaid);
+  document.getElementById('l-earn').textContent=egp(grandTotal);
   await loadHeaderStats();
 }
 
-function renderLedgerList(){
-  const el=document.getElementById('ledger-list');
-  if(!ledgerData.length)return;
-  const sortKey=document.getElementById('ledger-sort')?.value||'date_desc';
-  const sorted=[...ledgerData].sort((a,b)=>{
-    switch(sortKey){
-      case 'date_asc': return (a.date||'').localeCompare(b.date||'');
-      case 'date_desc': return (b.date||'').localeCompare(a.date||'');
-      case 'name_asc': return (a.session_name||'').localeCompare(b.session_name||'');
-      case 'subject_asc': return (a.subjects?.name||'').localeCompare(b.subjects?.name||'');
-      case 'duration_desc': return (b.t_charge_min||0)-(a.t_charge_min||0);
-      case 'amount_desc': return (b.total_worth||0)-(a.total_worth||0);
-      default: return 0;
-    }
-  });
-  document.getElementById('lcount').textContent=`${sorted.length} sessions`;
-  el.innerHTML=sorted.map(s=>renderSessCard(s)).join('');
-}
+function renderLedgerList(){} // kept for compatibility — analysis tab has no sort dropdown
 
 function renderSessCard(s){
   const st=s.session_students||[], tot=st.reduce((a,r)=>a+(r.amount||0),0);
@@ -1075,7 +1117,7 @@ function renderByTerm(students, uniKey, renderCard){
   const termOrder=Object.keys(termGroups).sort().reverse(); // newest term first
   return termOrder.map(term=>{
     const g=termGroups[term];
-    const termOwed=g.reduce((a,x)=>a+x.owed,0);
+    const termOwed=g.reduce((a,x)=>a+Math.max(0,x.owed-(discountCache[x.stu.id]||0)),0);
     const tKey=uniKey+'_t_'+term.replace(/[^a-zA-Z0-9]/g,'_');
     return`
     <div style="margin-bottom:6px">
@@ -1092,7 +1134,7 @@ function renderByTerm(students, uniKey, renderCard){
         </div>
       </div>
       <div id="sb-col_${tKey}" style="display:none">
-        ${g.map(item=>renderCard(item)).join('')}
+        ${g.map(item=>renderCard(item,tKey)).join('')}
       </div>
     </div>`;
   }).join('');
@@ -1123,7 +1165,7 @@ function renderStudentsList(){
     }
   });
 
-  function renderCard({stu,rows,owed,paid}){
+  function renderCard({stu,rows,owed,paid},ctx=''){
     // Sort this student's sessions by the selected order
     const sessSortKey=document.getElementById('sessions-sort')?.value||'date_desc';
     const sortedRows=[...rows].sort((a,b)=>{
@@ -1142,15 +1184,17 @@ function renderStudentsList(){
     const actualOwed=Math.max(0,owed-discount);
     const headerColor=actualOwed>0?'var(--coral)':'var(--teal)';
     const headerTxt=actualOwed>0?egp(actualOwed)+' owed':'✓ Settled';
+    // ctx makes IDs unique when same student appears in multiple term sections
+    const uid=ctx?`${ctx}_${stu.id}`:stu.id;
 
-    return`<div class="scard" id="stucard-${stu.id}">
-    <div class="scard-h" onclick="togSess('s${stu.id}')">
+    return`<div class="scard" id="stucard-${uid}">
+    <div class="scard-h" onclick="togSess('s${uid}')">
       <div style="flex:1"><div class="scard-subj">${esc(stu.name)}</div>
       <div class="scard-meta">${rows.length} session(s) · collected ${egp(paid)}</div></div>
       <div><div class="scard-hdr-amt" style="font:600 16px/1 var(--mono);color:${headerColor}">${headerTxt}</div></div>
-      <span class="chev" id="chev-s${stu.id}">▼</span>
+      <span class="chev" id="chev-s${uid}">▼</span>
     </div>
-    <div class="scard-body" id="sb-s${stu.id}" style="display:none">
+    <div class="scard-body" id="sb-s${uid}" style="display:none">
       ${rows.length>1?`<div class="brow" style="margin-bottom:12px">
         <button class="btn btn-t btn-sm" onclick="markAllStudentPaid(${stu.id},true)">✓ Mark All Paid</button>
         <button class="btn btn-d btn-sm" onclick="markAllStudentPaid(${stu.id},false)">✕ Mark All Unpaid</button>
@@ -1169,17 +1213,16 @@ ${r.sessions?.session_name?`<span style="font:600 11px/1 var(--mono);flex:0 0 au
         ${discount>0?`<span style="color:var(--tx3)">Discount: <b style="color:var(--violet)">-${egp(discount)}</b></span>`:''}
         <span style="color:var(--tx3)">Owed: <b style="color:var(--coral)" class="stu-total-owed">${egp(actualOwed)}</b></span>
       </div>
-      <!-- Discount control -->
       <div style="display:flex;align-items:center;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)">
         <span style="font:500 12px/1 var(--mono);color:var(--violet);flex-shrink:0">Discount:</span>
-        <input type="number" class="inp" id="disc-${stu.id}"
+        <input type="number" class="inp" id="disc-${uid}"
           value="${discount||''}"
           placeholder="0 EGP"
           style="width:120px;padding:8px 10px;font-size:13px;border-color:rgba(167,139,250,.4)"
           onchange="saveDiscount(${stu.id},this.value)"
           onkeydown="if(event.key==='Enter')this.blur()"/>
         <span style="font:400 11px/1 var(--mono);color:var(--tx3)">EGP off total owed</span>
-        ${discount>0?`<button class="btn btn-d btn-sm" onclick="saveDiscount(${stu.id},0);document.getElementById('disc-${stu.id}').value=''">✕ Remove</button>`:''}
+        ${discount>0?`<button class="btn btn-d btn-sm" onclick="saveDiscount(${stu.id},0);document.getElementById('disc-${uid}').value=''">✕ Remove</button>`:''}
       </div>
     </div>
   </div>`;
@@ -1212,7 +1255,7 @@ ${r.sessions?.session_name?`<span style="font:600 11px/1 var(--mono);flex:0 0 au
   order.forEach(col=>{
     if(!groups[col])return;
     const g=groups[col];
-    const colOwed=g.reduce((a,x)=>a+x.owed,0);
+    const colOwed=g.reduce((a,x)=>a+Math.max(0,x.owed-(discountCache[x.stu.id]||0)),0);
     const colColor=collegeColor(col);
     html+=`
     <div style="margin-bottom:8px">
@@ -1366,18 +1409,24 @@ async function markAllStudentPaid(stuId,paidState){
 }
 
 function recalcHeaderFromDOM(){
-  // Sum all ptog buttons currently rendered in the students list
-  let owed=0, paid=0;
-  document.querySelectorAll('#students-list [data-ss-id]').forEach(row=>{
-    const amt=parseFloat(row.dataset.amount)||0;
-    if(row.querySelector('.ptog').classList.contains('yes')) paid+=amt;
-    else owed+=amt;
+  // Recalculate from in-memory studentsData + discountCache (reliable even when sections collapsed)
+  let totalOwed=0,totalPaid=0;
+  (studentsData||[]).forEach(stu=>{
+    const rows=stu.session_students||[];
+    const rawOwed=rows.filter(r=>!r.paid).reduce((a,r)=>a+(r.amount||0),0);
+    const paid=rows.filter(r=>r.paid).reduce((a,r)=>a+(r.amount||0),0);
+    const disc=discountCache[stu.id]||0;
+    totalOwed+=Math.max(0,rawOwed-disc);
+    totalPaid+=paid;
   });
-  document.getElementById('hdr-owed').textContent=egp(owed);
-  document.getElementById('hdr-paid').textContent=egp(paid);
-  document.getElementById('l-owed').textContent=egp(owed);
-  document.getElementById('l-paid').textContent=egp(paid);
-  document.getElementById('l-earn').textContent=egp(owed+paid);
+  document.getElementById('hdr-owed').textContent=egp(totalOwed);
+  document.getElementById('hdr-paid').textContent=egp(totalPaid);
+  const lOwed=document.getElementById('l-owed');
+  const lPaid=document.getElementById('l-paid');
+  const lEarn=document.getElementById('l-earn');
+  if(lOwed)lOwed.textContent=egp(totalOwed);
+  if(lPaid)lPaid.textContent=egp(totalPaid);
+  if(lEarn)lEarn.textContent=egp(totalOwed+totalPaid);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -1408,7 +1457,8 @@ function renderSubjectsList(){
   const withTotals=subjectsData.map(subj=>{
     const sess=subj.sessions||[];
     const tot=sess.reduce((a,s)=>a+(s.total_worth||0),0);
-    return{subj,sess,tot};
+    const paidTot=sess.reduce((a,s)=>a+(s.session_students||[]).filter(r=>r.paid).reduce((b,r)=>b+(r.amount||0),0),0);
+    return{subj,sess,tot,paidTot};
   });
   withTotals.sort((a,b)=>{
     switch(subjSortKey){
@@ -1421,7 +1471,16 @@ function renderSubjectsList(){
     }
   });
 
-  el.innerHTML=withTotals.map(({subj,sess,tot})=>{
+  function meterBar(paid,total,height='6px'){
+    const pct=total>0?Math.min(100,Math.round(paid/total*100)):0;
+    const done=pct>=100;
+    const color=done?'var(--teal)':pct>60?'var(--amber)':'var(--coral)';
+    return`<div style="height:${height};background:var(--bg3);border-radius:3px;overflow:hidden;margin-top:6px">
+      <div style="height:100%;width:${pct}%;background:${color};transition:width .4s"></div></div>
+    <div style="font:400 10px/1 var(--mono);color:var(--tx3);margin-top:3px">${pct}% collected${done?' ✓':''}</div>`;
+  }
+
+  el.innerHTML=withTotals.map(({subj,sess,tot,paidTot})=>{
     const sortedSess=[...sess].sort((a,b)=>{
       switch(sessSortKey){
         case 'date_asc': return (a.date||'').localeCompare(b.date||'');
@@ -1431,47 +1490,63 @@ function renderSubjectsList(){
         default: return 0;
       }
     });
-    return`<div class="sjcard">
+    const owedTot=tot-paidTot;
+    const fullyPaid=owedTot<=0&&tot>0;
+    return`<div class="sjcard" style="${fullyPaid?'border-color:var(--teal)33;':'' }">
     <div class="sjcard-h" onclick="togSess('sj${subj.id}')">
-      <div><div class="sjcard-name">${esc(subj.name)}${subj.term?` <span style="font:400 12px/1 var(--mono);color:var(--tx3)">(${esc(subj.term)})</span>`:''}</div>
-      <div style="font:400 12px/1 var(--mono);color:var(--tx3);margin-top:4px">${sess.length} session(s)</div></div>
-      <div style="display:flex;align-items:center;gap:10px"><span class="sjcard-total">${egp(tot)}</span><span class="chev" id="chev-sj${subj.id}">▼</span></div>
+      <div style="flex:1">
+        <div class="sjcard-name">${esc(subj.name)}${subj.term?` <span style="font:400 12px/1 var(--mono);color:var(--tx3)">(${esc(subj.term)})</span>`:''}</div>
+        <div style="font:400 12px/1 var(--mono);color:var(--tx3);margin-top:4px">${sess.length} session(s)</div>
+        ${meterBar(paidTot,tot)}
+      </div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;margin-left:12px;flex-shrink:0">
+        <span class="sjcard-total" style="color:${fullyPaid?'var(--teal)':'var(--amber)'}">${egp(tot)}</span>
+        ${owedTot>0?`<span style="font:400 11px/1 var(--mono);color:var(--coral)">${egp(owedTot)} owed</span>`:
+          tot>0?`<span style="font:600 11px/1 var(--mono);color:var(--teal)">✓ Fully paid</span>`:''}
+        <span class="chev" id="chev-sj${subj.id}">▼</span>
+      </div>
     </div>
     <div style="display:none" id="sb-sj${subj.id}">
       <div style="padding:12px 16px">
       ${sortedSess.map(s=>{
         const studs=s.session_students||[];
+        const sPaid=studs.filter(r=>r.paid).reduce((a,r)=>a+(r.amount||0),0);
+        const sOwed=(s.total_worth||0)-sPaid;
+        const sDone=sOwed<=0&&(s.total_worth||0)>0;
         const liveCt=studs.filter(r=>r.student_type==='live').length;
         const passiveCt=studs.filter(r=>r.student_type==='passive').length;
         const total=studs.length;
         let countTxt='';
         if(total>0){
-          if(passiveCt===0){
-            countTxt=` · <b style="color:var(--teal)">${total} student${total===1?'':'s'}</b>`;
-          } else if(liveCt===0){
-            countTxt=` · <b style="color:var(--violet)">${total} student${total===1?'':'s'}</b>`;
-          } else {
-            countTxt=` · <b style="color:var(--blue)">${total} students</b> (<span style="color:var(--teal)">${liveCt}</span>+<span style="color:var(--violet)">${passiveCt}</span>)`;
-          }
+          if(passiveCt===0) countTxt=` · <b style="color:var(--teal)">${total} student${total===1?'':'s'}</b>`;
+          else if(liveCt===0) countTxt=` · <b style="color:var(--violet)">${total} student${total===1?'':'s'}</b>`;
+          else countTxt=` · <b style="color:var(--blue)">${total} students</b> (<span style="color:var(--teal)">${liveCt}</span>+<span style="color:var(--violet)">${passiveCt}</span>)`;
         }
-        return`<div style="background:var(--bg2);border:1px solid var(--line);border-radius:var(--r);margin-bottom:8px;overflow:hidden">
+        return`<div style="background:var(--bg2);border:1px solid ${sDone?'var(--teal)33':'var(--line)'};border-radius:var(--r);margin-bottom:8px;overflow:hidden">
           <div style="padding:11px 14px;cursor:pointer;display:flex;justify-content:space-between;align-items:center" onclick="togSess('ss${s.id}')">
-            <div>
+            <div style="flex:1">
               <div style="font:600 13px/1 var(--mono);color:var(--amber);margin-bottom:3px">${esc(s.session_name||'Session')}</div>
               <div style="font:400 12px/1 var(--mono);color:var(--tx3)">${s.date} · ${s.t_charge_min}m · ${s.rate} EGP/hr${countTxt}</div>
+              ${meterBar(sPaid,s.total_worth||0,'4px')}
             </div>
-            <div style="display:flex;align-items:center;gap:8px">
-              <span style="font:600 14px/1 var(--mono);color:var(--amber)">${egp(s.total_worth||0)}</span>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;margin-left:10px">
+              <span style="font:600 14px/1 var(--mono);color:${sDone?'var(--teal)':'var(--amber)'}">${egp(s.total_worth||0)}</span>
+              ${sOwed>0?`<span style="font:400 10px/1 var(--mono);color:var(--coral)">${egp(sOwed)} owed</span>`:
+                (s.total_worth||0)>0?`<span style="font:600 10px/1 var(--mono);color:var(--teal)">✓</span>`:''}
               <span class="chev" id="chev-ss${s.id}">▼</span>
             </div>
           </div>
           <div style="display:none;padding:8px 14px 12px;border-top:1px solid var(--line)" id="sb-ss${s.id}">
-            ${studs.map(r=>`<div class="sl"><div class="dot ${r.student_type}"></div><span class="sname">${esc(r.students?.name||'Unknown')}</span><span class="badge b-${r.student_type}">${r.student_type}</span><span class="samt">${egp(r.amount||0)}</span></div>`).join('')}
+            ${studs.map(r=>`<div class="sl"><div class="dot ${r.student_type}"></div><span class="sname">${esc(r.students?.name||'Unknown')}</span><span class="badge b-${r.student_type}">${r.student_type}</span><span class="samt">${egp(r.amount||0)}</span><span class="badge b-${r.paid?'paid':'unpaid'}" style="margin-left:4px">${r.paid?'✓ paid':'unpaid'}</span></div>`).join('')}
             <div style="font:500 12px/1 var(--mono);color:var(--amber);text-align:right;margin-top:6px">Total: ${egp(s.total_worth||0)}</div>
           </div>
         </div>`;
       }).join('')}
-      <div style="font:600 13px/1 var(--mono);color:var(--amber);text-align:right;padding:6px 0">Subject total: ${egp(tot)}</div>
+      <div style="display:flex;justify-content:flex-end;gap:16px;font:600 13px/1 var(--mono);padding:6px 0;border-top:1px solid var(--line);margin-top:4px">
+        <span style="color:var(--tx3)">Total: <b style="color:var(--amber)">${egp(tot)}</b></span>
+        <span style="color:var(--tx3)">Paid: <b style="color:var(--teal)">${egp(paidTot)}</b></span>
+        ${owedTot>0?`<span style="color:var(--tx3)">Owed: <b style="color:var(--coral)">${egp(owedTot)}</b></span>`:''}
+      </div>
       </div>
     </div>
   </div>`;
@@ -1481,6 +1556,16 @@ function renderSubjectsList(){
 // ══════════════════════════════════════════════════════════════════════════════
 // EDIT DB — FULL INLINE EDITING
 // ══════════════════════════════════════════════════════════════════════════════
+function filterEditList(){
+  const el=document.getElementById('edit-list');
+  const q=(document.getElementById('edit-search-box')?.value||'').toLowerCase().trim();
+  const items=el._editItems||[];
+  const results=document.getElementById('edit-results-box');
+  if(!results)return;
+  const filtered=!q?items:items.filter(i=>(i._searchText||'').includes(q));
+  results.innerHTML=filtered.map(i=>i._html).join('');
+}
+
 async function loadEditTab(type){
   const el=document.getElementById('edit-list');
   el.innerHTML='<div class="loading">Loading…</div>';
@@ -1488,48 +1573,34 @@ async function loadEditTab(type){
   if(type==='sessions'){
     const{data}=await sb.from('sessions').select('*,subjects(name)').order('date',{ascending:false});
     if(!data?.length){el.innerHTML='<div class="empty"><div class="empty-tx">No sessions</div></div>';return;}
-    el.innerHTML=data.map(s=>`
-    <div class="card" style="margin-bottom:8px">
-      <div class="card-b" style="padding:12px 14px">
+    el.innerHTML=`<div style="position:sticky;top:0;z-index:10;background:var(--bg);padding-bottom:10px">
+      <input class="inp" id="edit-search-box" placeholder="Search session name, subject, date…" oninput="filterEditList()" style="font-size:14px"/></div>
+      <div id="edit-results-box"></div>`;
+    el._editItems=data.map(s=>({
+      _searchText:[s.session_name,s.subjects?.name,s.date,s.notes].join(' ').toLowerCase(),
+      _html:`<div class="card" style="margin-bottom:8px"><div class="card-b" style="padding:12px 14px">
         <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;margin-bottom:10px">
-          <div>
-            <div style="font:600 13px/1 var(--mono);color:var(--amber);margin-bottom:4px">${esc(s.subjects?.name||'?')}</div>
-            <div style="font:600 15px/1 var(--sans)">${s.date}</div>
-          </div>
-          <button class="btn btn-d btn-sm" onclick="delRow('sessions',${s.id});loadEditTab('sessions')">🗑 Delete</button>
-        </div>
+          <div><div style="font:600 13px/1 var(--mono);color:var(--amber);margin-bottom:4px">${esc(s.subjects?.name||'?')}</div>
+            <div style="font:600 15px/1 var(--sans)">${s.date}</div></div>
+          <button class="btn btn-d btn-sm" onclick="delRow('sessions',${s.id});loadEditTab('sessions')">🗑 Delete</button></div>
         <div style="display:flex;gap:12px;flex-wrap:wrap;row-gap:10px">
-          <div class="fld" style="margin:0;min-width:130px">
-            <label>Session Name</label>
-            <input class="ei" value="${esc(s.session_name||'')}" placeholder="AI_01" onblur="updField('sessions','session_name',this.value,${s.id});loadEditTab('sessions')" onkeydown="if(event.key==='Enter')this.blur()" style="width:100%"/>
-          </div>
-          <div class="fld" style="margin:0;min-width:120px">
-            <label>Date</label>
-            <input class="ei" type="date" value="${s.date||''}" onblur="updField('sessions','date',this.value,${s.id});loadEditTab('sessions')" style="width:100%"/>
-          </div>
-          <div class="fld" style="margin:0;min-width:90px">
-            <label>Rate (EGP/hr)</label>
-            <input class="ei" type="number" value="${s.rate||0}" onblur="updField('sessions','rate',this.value,${s.id});loadEditTab('sessions')" onkeydown="if(event.key==='Enter')this.blur()" style="width:80px"/>
-          </div>
-          <div class="fld" style="margin:0;min-width:80px">
-            <label>T_meeting (min)</label>
-            <input class="ei" type="number" value="${s.t_meeting_min||0}" onblur="updField('sessions','t_meeting_min',this.value,${s.id});loadEditTab('sessions')" onkeydown="if(event.key==='Enter')this.blur()" style="width:70px"/>
-          </div>
-          <div class="fld" style="margin:0;min-width:80px">
-            <label>T_absent (min)</label>
-            <input class="ei" type="number" value="${s.t_absent_min||0}" onblur="updField('sessions','t_absent_min',this.value,${s.id});loadEditTab('sessions')" onkeydown="if(event.key==='Enter')this.blur()" style="width:70px"/>
-          </div>
-          <div class="fld" style="margin:0;min-width:80px">
-            <label>T_charge (min)</label>
-            <input class="ei" type="number" value="${s.t_charge_min||0}" onblur="updField('sessions','t_charge_min',this.value,${s.id});loadEditTab('sessions')" onkeydown="if(event.key==='Enter')this.blur()" style="width:70px"/>
-          </div>
-          <div class="fld" style="margin:0;min-width:180px">
-            <label>Notes</label>
-            <input class="ei" value="${esc(s.notes||'')}" placeholder="Notes…" onblur="updField('sessions','notes',this.value,${s.id})" onkeydown="if(event.key==='Enter')this.blur()" style="width:100%"/>
-          </div>
-        </div>
-      </div>
-    </div>`).join('');
+          <div class="fld" style="margin:0;min-width:130px"><label>Session Name</label>
+            <input class="ei" value="${esc(s.session_name||'')}" placeholder="AI_01" onblur="updField('sessions','session_name',this.value,${s.id});loadEditTab('sessions')" onkeydown="if(event.key==='Enter')this.blur()" style="width:100%"/></div>
+          <div class="fld" style="margin:0;min-width:120px"><label>Date</label>
+            <input class="ei" type="date" value="${s.date||''}" onblur="updField('sessions','date',this.value,${s.id});loadEditTab('sessions')" style="width:100%"/></div>
+          <div class="fld" style="margin:0;min-width:90px"><label>Rate (EGP/hr)</label>
+            <input class="ei" type="number" value="${s.rate||0}" onblur="updField('sessions','rate',this.value,${s.id});loadEditTab('sessions')" onkeydown="if(event.key==='Enter')this.blur()" style="width:80px"/></div>
+          <div class="fld" style="margin:0;min-width:80px"><label>T_meeting (min)</label>
+            <input class="ei" type="number" value="${s.t_meeting_min||0}" onblur="updField('sessions','t_meeting_min',this.value,${s.id});loadEditTab('sessions')" onkeydown="if(event.key==='Enter')this.blur()" style="width:70px"/></div>
+          <div class="fld" style="margin:0;min-width:80px"><label>T_absent (min)</label>
+            <input class="ei" type="number" value="${s.t_absent_min||0}" onblur="updField('sessions','t_absent_min',this.value,${s.id});loadEditTab('sessions')" onkeydown="if(event.key==='Enter')this.blur()" style="width:70px"/></div>
+          <div class="fld" style="margin:0;min-width:80px"><label>T_charge (min)</label>
+            <input class="ei" type="number" value="${s.t_charge_min||0}" onblur="updField('sessions','t_charge_min',this.value,${s.id});loadEditTab('sessions')" onkeydown="if(event.key==='Enter')this.blur()" style="width:70px"/></div>
+          <div class="fld" style="margin:0;min-width:180px"><label>Notes</label>
+            <input class="ei" value="${esc(s.notes||'')}" placeholder="Notes…" onblur="updField('sessions','notes',this.value,${s.id})" onkeydown="if(event.key==='Enter')this.blur()" style="width:100%"/></div>
+        </div></div></div>`
+    }));
+    filterEditList();
   }
 
   if(type==='roster'){
@@ -1549,45 +1620,62 @@ async function loadEditTab(type){
   if(type==='absence'){
     const{data}=await sb.from('absence_periods').select('*,sessions(session_name,date,subjects(name))').order('session_id');
     if(!data?.length){el.innerHTML='<div class="empty"><div class="empty-tx">No absence periods</div></div>';return;}
-    el.innerHTML=data.map(a=>`
-    <div style="background:var(--bg1);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;margin-bottom:8px">
-      <div style="font:600 13px/1 var(--mono);color:var(--amber);margin-bottom:8px">${esc(a.sessions?.session_name||'?')} — ${esc(a.sessions?.subjects?.name||'?')} — ${a.sessions?.date||''}</div>
-      <div style="display:flex;gap:12px;flex-wrap:wrap;row-gap:10px;align-items:flex-end">
-        <div class="fld" style="margin:0;min-width:100px"><label>From (HH:MM:SS)</label>
-          <input class="ei" value="${esc(a.from_ts||'')}" onblur="updField('absence_periods','from_ts',this.value,${a.id})" onkeydown="if(event.key==='Enter')this.blur()" style="width:100px"/></div>
-        <div class="fld" style="margin:0;min-width:100px"><label>To (HH:MM:SS)</label>
-          <input class="ei" value="${esc(a.to_ts||'')}" onblur="updField('absence_periods','to_ts',this.value,${a.id})" onkeydown="if(event.key==='Enter')this.blur()" style="width:100px"/></div>
-        <div class="fld" style="margin:0;min-width:80px"><label>Duration (min)</label>
-          <input class="ei" type="number" value="${a.duration_min||0}" onblur="updField('absence_periods','duration_min',this.value,${a.id})" onkeydown="if(event.key==='Enter')this.blur()" style="width:70px"/></div>
-        <div class="fld" style="margin:0;flex:1;min-width:140px"><label>Talkers</label>
-          <input class="ei" value="${esc(a.talkers||'')}" placeholder="names…" onblur="updField('absence_periods','talkers',this.value,${a.id})" onkeydown="if(event.key==='Enter')this.blur()" style="width:100%"/></div>
-        <button class="btn btn-d btn-sm" onclick="delRow('absence_periods',${a.id});loadEditTab('absence')">🗑</button>
-      </div>
-    </div>`).join('');
+    el.innerHTML=`<div style="position:sticky;top:0;z-index:10;background:var(--bg);padding-bottom:10px">
+      <input class="inp" id="edit-search-box" placeholder="Search session, subject, talker…" oninput="filterEditList()" style="font-size:14px"/></div>
+      <div id="edit-results-box"></div>`;
+    el._editItems=data.map(a=>({
+      _searchText:[a.sessions?.session_name,a.sessions?.subjects?.name,a.sessions?.date,a.talkers].join(' ').toLowerCase(),
+      _html:`<div style="background:var(--bg1);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px;margin-bottom:8px">
+        <div style="font:600 13px/1 var(--mono);color:var(--amber);margin-bottom:8px">${esc(a.sessions?.session_name||'?')} — ${esc(a.sessions?.subjects?.name||'?')} — ${a.sessions?.date||''}</div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;row-gap:10px;align-items:flex-end">
+          <div class="fld" style="margin:0;min-width:100px"><label>From</label>
+            <input class="ei" value="${esc(a.from_ts||'')}" onblur="updField('absence_periods','from_ts',this.value,${a.id})" onkeydown="if(event.key==='Enter')this.blur()" style="width:100px"/></div>
+          <div class="fld" style="margin:0;min-width:100px"><label>To</label>
+            <input class="ei" value="${esc(a.to_ts||'')}" onblur="updField('absence_periods','to_ts',this.value,${a.id})" onkeydown="if(event.key==='Enter')this.blur()" style="width:100px"/></div>
+          <div class="fld" style="margin:0;min-width:80px"><label>Duration (min)</label>
+            <input class="ei" type="number" value="${a.duration_min||0}" onblur="updField('absence_periods','duration_min',this.value,${a.id})" onkeydown="if(event.key==='Enter')this.blur()" style="width:70px"/></div>
+          <div class="fld" style="margin:0;flex:1;min-width:140px"><label>Talkers</label>
+            <input class="ei" value="${esc(a.talkers||'')}" placeholder="names…" onblur="updField('absence_periods','talkers',this.value,${a.id})" onkeydown="if(event.key==='Enter')this.blur()" style="width:100%"/></div>
+          <button class="btn btn-d btn-sm" onclick="delRow('absence_periods',${a.id});loadEditTab('absence')">🗑</button>
+        </div></div>`
+    }));
+    filterEditList();
   }
 
   if(type==='students'){
     const{data}=await sb.from('students').select('*').order('name');
     if(!data?.length){el.innerHTML='<div class="empty"><div class="empty-tx">No students</div></div>';return;}
-    el.innerHTML=data.map(s=>`
-    <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--bg1);border:1px solid var(--line);border-radius:var(--r);margin-bottom:6px;flex-wrap:wrap">
-      <input class="ei" value="${esc(s.name)}" onblur="updField('students','name',this.value,${s.id})" onkeydown="if(event.key==='Enter')this.blur()" style="flex:1;min-width:120px"/>
-      <input class="ei" value="${esc(s.email||'')}" placeholder="email" onblur="updField('students','email',this.value,${s.id})" onkeydown="if(event.key==='Enter')this.blur()" style="flex:1;min-width:120px"/>
-      <input class="ei" type="number" value="${s.default_rate||0}" onblur="updField('students','default_rate',this.value,${s.id})" onkeydown="if(event.key==='Enter')this.blur()" style="width:70px;text-align:right"/>
-      <span style="font:400 11px/1 var(--mono);color:var(--tx3)">EGP/hr</span>
-      <button class="btn btn-d btn-sm" onclick="delRow('students',${s.id});loadEditTab('students')">🗑</button>
-    </div>`).join('');
+    el.innerHTML=`<div style="position:sticky;top:0;z-index:10;background:var(--bg);padding-bottom:10px">
+      <input class="inp" id="edit-search-box" placeholder="Search student name or email…" oninput="filterEditList()" style="font-size:14px"/></div>
+      <div id="edit-results-box"></div>`;
+    el._editItems=data.map(s=>({
+      _searchText:[s.name,s.email].join(' ').toLowerCase(),
+      _html:`<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--bg1);border:1px solid var(--line);border-radius:var(--r);margin-bottom:6px;flex-wrap:wrap">
+        <input class="ei" value="${esc(s.name)}" onblur="updField('students','name',this.value,${s.id})" onkeydown="if(event.key==='Enter')this.blur()" style="flex:1;min-width:120px"/>
+        <input class="ei" value="${esc(s.email||'')}" placeholder="email" onblur="updField('students','email',this.value,${s.id})" onkeydown="if(event.key==='Enter')this.blur()" style="flex:1;min-width:120px"/>
+        <input class="ei" type="number" value="${s.default_rate||0}" onblur="updField('students','default_rate',this.value,${s.id})" onkeydown="if(event.key==='Enter')this.blur()" style="width:70px;text-align:right"/>
+        <span style="font:400 11px/1 var(--mono);color:var(--tx3)">EGP/hr</span>
+        <button class="btn btn-d btn-sm" onclick="delRow('students',${s.id});loadEditTab('students')">🗑</button>
+      </div>`
+    }));
+    filterEditList();
   }
 
   if(type==='subjects'){
     const{data}=await sb.from('subjects').select('*').order('name');
     if(!data?.length){el.innerHTML='<div class="empty"><div class="empty-tx">No subjects</div></div>';return;}
-    el.innerHTML=data.map(s=>`
-    <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--bg1);border:1px solid var(--line);border-radius:var(--r);margin-bottom:6px;flex-wrap:wrap">
-      <input class="ei" value="${esc(s.name)}" onblur="updField('subjects','name',this.value,${s.id})" onkeydown="if(event.key==='Enter')this.blur()" style="flex:1;min-width:120px"/>
-      <input class="ei" value="${esc(s.term||'')}" placeholder="term e.g. 262" onblur="updField('subjects','term',this.value,${s.id})" onkeydown="if(event.key==='Enter')this.blur()" style="width:100px"/>
-      <button class="btn btn-d btn-sm" onclick="delRow('subjects',${s.id});loadEditTab('subjects')">🗑</button>
-    </div>`).join('');
+    el.innerHTML=`<div style="position:sticky;top:0;z-index:10;background:var(--bg);padding-bottom:10px">
+      <input class="inp" id="edit-search-box" placeholder="Search subject name or term…" oninput="filterEditList()" style="font-size:14px"/></div>
+      <div id="edit-results-box"></div>`;
+    el._editItems=data.map(s=>({
+      _searchText:[s.name,s.term].join(' ').toLowerCase(),
+      _html:`<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--bg1);border:1px solid var(--line);border-radius:var(--r);margin-bottom:6px;flex-wrap:wrap">
+        <input class="ei" value="${esc(s.name)}" onblur="updField('subjects','name',this.value,${s.id})" onkeydown="if(event.key==='Enter')this.blur()" style="flex:1;min-width:120px"/>
+        <input class="ei" value="${esc(s.term||'')}" placeholder="term e.g. 262" onblur="updField('subjects','term',this.value,${s.id})" onkeydown="if(event.key==='Enter')this.blur()" style="width:100px"/>
+        <button class="btn btn-d btn-sm" onclick="delRow('subjects',${s.id});loadEditTab('subjects')">🗑</button>
+      </div>`
+    }));
+    filterEditList();
   }
 
   if(type==='merge'){
@@ -1635,19 +1723,39 @@ async function loadEditTab(type){
   if(type==='name_mappings'){
     const{data}=await sb.from('name_mappings').select('*').order('raw_identifier');
     if(!data?.length){el.innerHTML='<div class="empty"><div class="empty-tx">No name mappings yet</div></div>';return;}
-    el.innerHTML=data.map(m=>`
-    <div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--bg1);border:1px solid var(--line);border-radius:var(--r);margin-bottom:6px;flex-wrap:wrap">
-      <span style="font:400 11px/1 var(--mono);color:var(--tx3);flex:1;min-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(m.raw_identifier)}">${esc(m.raw_identifier)}</span>
-      <span style="color:var(--tx3)">→</span>
-      <input class="ei" value="${esc(m.real_name)}" onblur="updField('name_mappings','real_name',this.value,${m.id})" onkeydown="if(event.key==='Enter')this.blur()" style="flex:1;min-width:120px"/>
-      <button class="btn btn-d btn-sm" onclick="delRow('name_mappings',${m.id});loadEditTab('name_mappings')">🗑</button>
-    </div>`).join('');
+    el.innerHTML=`<div style="position:sticky;top:0;z-index:10;background:var(--bg);padding-bottom:10px">
+      <input class="inp" id="edit-search-box" placeholder="Search email or real name…" oninput="filterEditList()" style="font-size:14px"/></div>
+      <div id="edit-results-box"></div>`;
+    el._editItems=data.map(m=>({
+      _searchText:[m.raw_identifier,m.real_name].join(' ').toLowerCase(),
+      _html:`<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--bg1);border:1px solid var(--line);border-radius:var(--r);margin-bottom:6px;flex-wrap:wrap">
+        <span style="font:400 11px/1 var(--mono);color:var(--tx3);flex:1;min-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(m.raw_identifier)}">${esc(m.raw_identifier)}</span>
+        <span style="color:var(--tx3)">→</span>
+        <input class="ei" value="${esc(m.real_name)}" onblur="updField('name_mappings','real_name',this.value,${m.id})" onkeydown="if(event.key==='Enter')this.blur()" style="flex:1;min-width:120px"/>
+        <button class="btn btn-d btn-sm" onclick="delRow('name_mappings',${m.id});loadEditTab('name_mappings')">🗑</button>
+      </div>`
+    }));
+    filterEditList();
   }
 }
 
 async function updField(table,field,value,id){
   const obj={}; obj[field]=value;
   await sb.from(table).update(obj).eq('id',id);
+  // When charge time or rate changes, recalculate each student's amount for that session
+  if(table==='sessions'&&(field==='t_charge_min'||field==='rate')){
+    const{data:sess}=await sb.from('sessions').select('t_charge_min,rate,session_students(id)').eq('id',id).single();
+    if(sess){
+      const newAmt=Math.round((sess.t_charge_min/60)*sess.rate);
+      for(const ss of sess.session_students||[]){
+        await sb.from('session_students').update({amount:newAmt}).eq('id',ss.id);
+      }
+      await recalcTotal(id);
+    }
+    loadLedger();loadStudents();loadSubjectsTab();loadHeaderStats();
+    toast('Saved & amounts recalculated ✓');
+    return;
+  }
   toast('Saved ✓');
   if(table==='subjects'){await refreshSubjects();loadSubjectsTab();}
   if(table==='students')loadStudents();
@@ -1915,25 +2023,34 @@ async function renderVttRes(){
   updateVttPreview();
 }
 
+let vttOverrideAmount=null;
+
 function updateVttPreview(){
-  const rate=parseFloat(document.getElementById('vtt-rate')?.value||0), a=vttAna;
-  if(!a||!rate){document.getElementById('vtt-preview').innerHTML='';return;}
-  // Use editable duration if set, otherwise fall back to VTT analysis result
+  const rate=parseFloat(document.getElementById('vtt-rate')?.value||0),a=vttAna;
+  const pEl=document.getElementById('vtt-preview'),btn=document.getElementById('vtt-round-btn');
+  if(!a||!rate){pEl.innerHTML='';if(btn)btn.style.display='none';vttOverrideAmount=null;return;}
   const durMin=parseFloat(document.getElementById('vtt-duration')?.value)||a.T_charge_min;
-  const perAmt=Math.round((durMin/60)*rate);
+  const calcAmt=Math.round((durMin/60)*rate);
+  const perAmt=vttOverrideAmount!==null?vttOverrideAmount:calcAmt;
   const tot=(a.participants.length+vttPassive.length)*perAmt;
-  document.getElementById('vtt-preview').innerHTML=`
-    <div class="cbox"><div><div class="cbox-lbl">Per student</div><div class="cbox-sub">${(durMin/60).toFixed(2)} hrs × ${rate} EGP</div></div><div class="cbox-val">${egp(perAmt)}</div></div>
+  const rounded=vttOverrideAmount!==null&&vttOverrideAmount!==calcAmt;
+  pEl.innerHTML=`
+    <div class="cbox"><div><div class="cbox-lbl">Per student</div>
+    <div class="cbox-sub">${(durMin/60).toFixed(2)} hrs × ${rate} EGP${rounded?` <span style="color:var(--amber)">→ rounded</span>`:''}</div>
+    </div><div class="cbox-val">${egp(perAmt)}</div></div>
     ${(a.participants.length+vttPassive.length)>0?`<div class="cbox g"><div><div class="cbox-lbl">Session total</div><div class="cbox-sub">${a.participants.length+vttPassive.length} students</div></div><div class="cbox-val">${egp(tot)}</div></div>`:''} `;
+  if(btn)btn.style.display=(calcAmt%10===0&&!rounded)?'none':'block';
+  if(btn)btn.textContent=rounded?`⬇ Round (now ${egp(perAmt)} — click for ${egp(Math.floor(calcAmt/10)*10)})`:`⬇ Round ${egp(calcAmt)} → ${egp(Math.floor(calcAmt/10)*10)}`;
 }
 
-function roundVttDuration(){
-  const inp=document.getElementById('vtt-duration');
-  const v=parseFloat(inp.value||0);
-  if(!v)return;
-  inp.value=Math.floor(v/10)*10; // floor to nearest 10
+function roundVttAmount(){
+  const rate=parseFloat(document.getElementById('vtt-rate')?.value||0),a=vttAna;
+  if(!a||!rate)return;
+  const durMin=parseFloat(document.getElementById('vtt-duration')?.value)||a.T_charge_min;
+  const calcAmt=Math.round((durMin/60)*rate);
+  vttOverrideAmount=Math.floor(calcAmt/10)*10;
   updateVttPreview();
-  toast(`Rounded to ${inp.value} min ✓`);
+  toast(`Per-student amount: ${egp(vttOverrideAmount)} ✓`);
 }
 
 function addVttPassive(){
@@ -1952,7 +2069,7 @@ function addVttPassive(){
   updateVttPreview();
 }
 
-function resetVtt(){vttAna=null;vttPassive=[];document.getElementById('vtt-res').style.display='none';document.getElementById('vtt-dz-t').textContent='Drop .vtt file here or tap to browse';}
+function resetVtt(){vttAna=null;vttPassive=[];vttOverrideAmount=null;document.getElementById('vtt-res').style.display='none';document.getElementById('vtt-dz-t').textContent='Drop .vtt file here or tap to browse';}
 
 // ── Queue engine ─────────────────────────────────────────────────────────────
 function updateQueueBar(){
@@ -2069,7 +2186,9 @@ async function logVttSession(){
   // Use edited duration if user changed it, else use VTT analysis value
   const editedDur=parseFloat(document.getElementById('vtt-duration')?.value);
   const chargeMin=(!isNaN(editedDur)&&editedDur>0)?editedDur:a.T_charge_min;
-  const perAmt=Math.round((chargeMin/60)*rate);
+  const rawAmt=Math.round((chargeMin/60)*rate);
+  const perAmt=vttOverrideAmount!==null?vttOverrideAmount:rawAmt;
+  vttOverrideAmount=null;
   // Save name mappings
   const parts=document.querySelectorAll('#vtt-parts input[data-raw]');
   const nmMap={};
