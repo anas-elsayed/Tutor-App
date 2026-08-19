@@ -568,6 +568,7 @@ create policy "all" on app_settings for all using(true) with check(true);</div>
       <div class="card-b">
         <div class="brow" style="margin-bottom:12px">
           <button class="btn btn-t btn-sm" onclick="runDbCheck()">🔍 Check Connection</button>
+          <button class="btn btn-g btn-sm" onclick="recalcAllTotals()" title="Fix stale session totals in the database">🔧 Fix Session Totals</button>
           <button class="btn btn-g btn-sm" onclick="location.reload()">🔄 Reload App</button>
           <button class="btn btn-d btn-sm" onclick="if(confirm('Reset connection? Your data stays safe in Supabase.')){localStorage.clear();location.reload()}">Reset Connection</button>
         </div>
@@ -878,7 +879,7 @@ async function loadLedger(){
     let sTotal=0,sPaid=0,sHours=0,sLive=0,sPassive=0;
     sess.forEach(s=>{
       const hrs=(s.t_charge_min||0)/60;
-      const sessTotal=s.total_worth||0;
+      const sessTotal=(s.session_students||[]).reduce((a,r)=>a+(r.amount||0),0); // real sum, not stale total_worth
       const studRows=s.session_students||[];
       const sessPaid=studRows.filter(r=>r.paid).reduce((a,r)=>a+(r.amount||0),0);
       const liveEarned=studRows.filter(r=>r.student_type==='live').reduce((a,r)=>a+(r.amount||0),0);
@@ -1662,17 +1663,22 @@ function renderSubjectsList(){
         default: return 0;
       }
     });
-    const owedTot=tot-paidTot;
-    const fullyPaid=owedTot<=0&&tot>0;
+    // Use sum of session_students.amount as the real total — never trust total_worth
+    // total_worth can be stale if students were added/removed after session creation
+    const realTot=sess.reduce((a,s)=>{
+      return a+(s.session_students||[]).reduce((b,r)=>b+(r.amount||0),0);
+    },0);
+    const owedTot=realTot-paidTot;
+    const fullyPaid=owedTot<=0&&realTot>0;
     return`<div class="sjcard" style="${fullyPaid?'border-color:var(--teal)33;':'' }">
     <div class="sjcard-h" onclick="togSess('sj${subj.id}')">
       <div style="flex:1">
         <div class="sjcard-name">${esc(subj.name)}${subj.term?` <span style="font:400 12px/1 var(--mono);color:var(--tx3)">(${esc(subj.term)})</span>`:''}</div>
         <div style="font:400 12px/1 var(--mono);color:var(--tx3);margin-top:4px">${sess.length} session(s)</div>
-        ${meterBar(paidTot,tot)}
+        ${meterBar(paidTot,realTot)}
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;margin-left:12px;flex-shrink:0">
-        <span class="sjcard-total" style="color:${fullyPaid?'var(--teal)':'var(--amber)'}">${egp(tot)}</span>
+        <span class="sjcard-total" style="color:${fullyPaid?'var(--teal)':'var(--amber)'}">${egp(realTot)}</span>
         ${owedTot>0?`<span style="font:400 11px/1 var(--mono);color:var(--coral)">${egp(owedTot)} owed</span>`:
           tot>0?`<span style="font:600 11px/1 var(--mono);color:var(--teal)">✓ Fully paid</span>`:''}
         <span class="chev" id="chev-sj${subj.id}">▼</span>
@@ -1682,9 +1688,10 @@ function renderSubjectsList(){
       <div style="padding:12px 16px">
       ${sortedSess.map(s=>{
         const studs=s.session_students||[];
+        const sReal=studs.reduce((a,r)=>a+(r.amount||0),0); // real total from students
         const sPaid=studs.filter(r=>r.paid).reduce((a,r)=>a+(r.amount||0),0);
-        const sOwed=(s.total_worth||0)-sPaid;
-        const sDone=sOwed<=0&&(s.total_worth||0)>0;
+        const sOwed=sReal-sPaid;
+        const sDone=sOwed<=0&&sReal>0;
         const liveCt=studs.filter(r=>r.student_type==='live').length;
         const passiveCt=studs.filter(r=>r.student_type==='passive').length;
         const total=studs.length;
@@ -1699,23 +1706,23 @@ function renderSubjectsList(){
             <div style="flex:1">
               <div style="font:600 13px/1 var(--mono);color:var(--amber);margin-bottom:3px">${esc(s.session_name||'Session')}</div>
               <div style="font:400 12px/1 var(--mono);color:var(--tx3)">${s.date} · ${s.t_charge_min}m · ${s.rate} EGP/hr${countTxt}</div>
-              ${meterBar(sPaid,s.total_worth||0,'4px')}
+              ${meterBar(sPaid,sReal,'4px')}
             </div>
             <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;margin-left:10px">
               <span style="font:600 14px/1 var(--mono);color:${sDone?'var(--teal)':'var(--amber)'}">${egp(s.total_worth||0)}</span>
               ${sOwed>0?`<span style="font:400 10px/1 var(--mono);color:var(--coral)">${egp(sOwed)} owed</span>`:
-                (s.total_worth||0)>0?`<span style="font:600 10px/1 var(--mono);color:var(--teal)">✓</span>`:''}
+                sReal>0?`<span style="font:600 10px/1 var(--mono);color:var(--teal)">✓</span>`:''}
               <span class="chev" id="chev-ss${s.id}">▼</span>
             </div>
           </div>
           <div style="display:none;padding:8px 14px 12px;border-top:1px solid var(--line)" id="sb-ss${s.id}">
             ${studs.map(r=>`<div class="sl"><div class="dot ${r.student_type}"></div><span class="sname">${esc(r.students?.name||'Unknown')}</span><span class="badge b-${r.student_type}">${r.student_type}</span><span class="samt">${egp(r.amount||0)}</span><span class="badge b-${r.paid?'paid':'unpaid'}" style="margin-left:4px">${r.paid?'✓ paid':'unpaid'}</span></div>`).join('')}
-            <div style="font:500 12px/1 var(--mono);color:var(--amber);text-align:right;margin-top:6px">Total: ${egp(s.total_worth||0)}</div>
+            <div style="font:500 12px/1 var(--mono);color:var(--amber);text-align:right;margin-top:6px">Total: ${egp(sReal)}</div>
           </div>
         </div>`;
       }).join('')}
       <div style="display:flex;justify-content:flex-end;gap:16px;font:600 13px/1 var(--mono);padding:6px 0;border-top:1px solid var(--line);margin-top:4px">
-        <span style="color:var(--tx3)">Total: <b style="color:var(--amber)">${egp(tot)}</b></span>
+        <span style="color:var(--tx3)">Total: <b style="color:var(--amber)">${egp(realTot)}</b></span>
         <span style="color:var(--tx3)">Paid: <b style="color:var(--teal)">${egp(paidTot)}</b></span>
         ${owedTot>0?`<span style="color:var(--tx3)">Owed: <b style="color:var(--coral)">${egp(owedTot)}</b></span>`:''}
       </div>
@@ -2876,6 +2883,24 @@ async function mergeStudents(keepId,deleteId,name){
   toast(`Merged ✓ — all sessions now under ${name||'student'}`);
   loadEditTab('merge');
   loadStudents();loadHeaderStats();
+}
+
+async function recalcAllTotals(){
+  toast('Recalculating all session totals…');
+  const{data:sessions}=await sb.from('sessions').select('id');
+  if(!sessions?.length){toast('No sessions found');return;}
+  let fixed=0;
+  for(const s of sessions){
+    const{data:rows}=await sb.from('session_students').select('amount').eq('session_id',s.id);
+    const real=(rows||[]).reduce((a,r)=>a+(r.amount||0),0);
+    const{data:cur}=await sb.from('sessions').select('total_worth').eq('id',s.id).single();
+    if(Math.abs((cur?.total_worth||0)-real)>0.01){
+      await sb.from('sessions').update({total_worth:real}).eq('id',s.id);
+      fixed++;
+    }
+  }
+  toast(`Fixed ${fixed} session total${fixed===1?'':'s'} ✓`);
+  loadLedger();loadSubjectsTab();loadHeaderStats();
 }
 
 async function recalcTotal(sessId){
