@@ -841,96 +841,268 @@ async function loadHeaderStats(){
 // LEDGER
 // ══════════════════════════════════════════════════════════════════════════════
 async function loadLedger(){
-  // loadLedger now loads the Analysis tab
   const el=document.getElementById('analysis-list');
   if(!el)return;
   el.innerHTML='<div class="loading">Loading…</div>';
-  // Fetch subjects with full session+payment data
-  const{data,error}=await sb.from('subjects').select(`
-    id,name,term,
-    sessions(id,date,total_worth,session_name,t_charge_min,rate,
-      session_students(id,amount,paid,student_type))
-  `).order('name');
-  if(error){el.innerHTML='<div class="empty"><div class="empty-ic">⚠️</div><div class="empty-tx">'+esc(error.message)+'</div></div>';return;}
-  const subjects=data||[];
 
-  let grandTotal=0,grandPaid=0;
-  const subjStats=subjects.map(subj=>{
-    const sess=subj.sessions||[];
-    const tot=sess.reduce((a,s)=>a+(s.total_worth||0),0);
-    const paid=sess.reduce((a,s)=>a+(s.session_students||[]).filter(r=>r.paid).reduce((b,r)=>b+(r.amount||0),0),0);
-    grandTotal+=tot; grandPaid+=paid;
-    return{subj,sess,tot,paid,owed:tot-paid};
-  }).filter(x=>x.tot>0);
+  // Fetch everything needed for analysis
+  const[subjRes,stuRes]=await Promise.all([
+    sb.from('subjects').select(`id,name,term,departments(name,universities(name)),sessions(id,date,total_worth,session_name,t_charge_min,rate,session_students(id,amount,paid,student_type,student_id))`).order('name'),
+    sb.from('students').select(`id,name,session_students(id,amount,paid,student_type,sessions(id,date,subjects(name,term)))`)
+  ]);
+  if(subjRes.error){el.innerHTML='<div class="empty"><div class="empty-ic">⚠️</div><div class="empty-tx">'+esc(subjRes.error.message)+'</div></div>';return;}
 
-  // Monthly earnings from session dates
+  const subjects=subjRes.data||[];
+  const students=stuRes.data||[];
+
+  // ── AGGREGATE DATA ─────────────────────────────────────
+  let grandTotal=0,grandPaid=0,grandHours=0,grandLiveEarned=0,grandPassiveEarned=0;
+
+  // Per-term aggregation
+  const termMap={};
+  // Per-subject
+  const subjStats=[];
+  // Monthly
   const monthly={};
-  subjects.forEach(subj=>(subj.sessions||[]).forEach(s=>{
-    if(!s.date)return;
-    const mo=s.date.slice(0,7); // YYYY-MM
-    if(!monthly[mo])monthly[mo]={total:0,paid:0};
-    monthly[mo].total+=(s.total_worth||0);
-    monthly[mo].paid+=(s.session_students||[]).filter(r=>r.paid).reduce((a,r)=>a+(r.amount||0),0);
-  }));
-  const months=Object.keys(monthly).sort().reverse().slice(0,6);
+  // Per-university
+  const uniMap={};
 
-  function bar(paid,total,h='8px'){
-    const pct=total>0?Math.min(100,Math.round(paid/total*100)):0;
-    const done=pct>=100;
-    const color=done?'var(--teal)':pct>60?'var(--amber)':'var(--coral)';
-    return`<div style="height:${h};background:var(--bg3);border-radius:4px;overflow:hidden;margin-top:5px">
-      <div style="height:100%;width:${pct}%;background:${color};transition:width .5s"></div></div>
-    <div style="font:400 10px/1 var(--mono);color:var(--tx3);margin-top:2px">${pct}%${done?' ✓':''}</div>`;
+  subjects.forEach(subj=>{
+    const sess=subj.sessions||[];
+    const uniRaw=subj.departments?.universities?.name||'Private';
+    const uni=uniDisplayName(uniRaw);
+    if(!uniMap[uni])uniMap[uni]={total:0,paid:0,hours:0,sessions:0,students:new Set()};
+    const term=subj.term||'—';
+    if(!termMap[term])termMap[term]={total:0,paid:0,hours:0,liveEarned:0,passiveEarned:0,sessions:0};
+
+    let sTotal=0,sPaid=0,sHours=0,sLive=0,sPassive=0;
+    sess.forEach(s=>{
+      const hrs=(s.t_charge_min||0)/60;
+      const sessTotal=s.total_worth||0;
+      const studRows=s.session_students||[];
+      const sessPaid=studRows.filter(r=>r.paid).reduce((a,r)=>a+(r.amount||0),0);
+      const liveEarned=studRows.filter(r=>r.student_type==='live').reduce((a,r)=>a+(r.amount||0),0);
+      const passiveEarned=studRows.filter(r=>r.student_type==='passive').reduce((a,r)=>a+(r.amount||0),0);
+      studRows.forEach(r=>uniMap[uni].students.add(r.student_id));
+      sTotal+=sessTotal; sPaid+=sessPaid; sHours+=hrs; sLive+=liveEarned; sPassive+=passiveEarned;
+      termMap[term].total+=sessTotal; termMap[term].paid+=sessPaid;
+      termMap[term].hours+=hrs; termMap[term].liveEarned+=liveEarned; termMap[term].passiveEarned+=passiveEarned; termMap[term].sessions++;
+      uniMap[uni].total+=sessTotal; uniMap[uni].paid+=sessPaid; uniMap[uni].hours+=hrs; uniMap[uni].sessions++;
+      if(s.date){const mo=s.date.slice(0,7);if(!monthly[mo])monthly[mo]={total:0,paid:0,hours:0};monthly[mo].total+=sessTotal;monthly[mo].paid+=sessPaid;monthly[mo].hours+=hrs;}
+    });
+    grandTotal+=sTotal; grandPaid+=sPaid; grandHours+=sHours;
+    grandLiveEarned+=sLive; grandPassiveEarned+=sPassive;
+    if(sTotal>0)subjStats.push({subj,total:sTotal,paid:sPaid,owed:sTotal-sPaid,hours:sHours,liveEarned:sLive,passiveEarned:sPassive,sessions:sess.length});
+  });
+
+  const grandOwed=grandTotal-grandPaid;
+  const collRate=grandTotal>0?Math.round(grandPaid/grandTotal*100):0;
+  const avgHrRate=grandHours>0?Math.round(grandTotal/grandHours):0;
+  const effectiveHrRate=grandHours>0?Math.round(grandLiveEarned/grandHours):0;
+  const passivePct=grandTotal>0?Math.round(grandPassiveEarned/grandTotal*100):0;
+  // How many hours of teaching time passive income "bought" you
+  const passiveEquivHours=effectiveHrRate>0?Math.round(grandPassiveEarned/effectiveHrRate*10)/10:0;
+
+  const monthKeys=Object.keys(monthly).sort();
+  const last6=monthKeys.slice(-6);
+  const avgMonthly=last6.length?Math.round(last6.reduce((a,m)=>a+monthly[m].total,0)/last6.length):0;
+  const avgMonthlyHours=last6.length?Math.round(last6.reduce((a,m)=>a+monthly[m].hours,0)/last6.length*10)/10:0;
+
+  // Top students by owed
+  const stuOwed=students.map(s=>{
+    const rows=s.session_students||[];
+    const owed=rows.filter(r=>!r.paid).reduce((a,r)=>a+(r.amount||0),0);
+    const paid=rows.filter(r=>r.paid).reduce((a,r)=>a+(r.amount||0),0);
+    return{name:s.name,owed,paid};
+  }).filter(x=>x.owed>0).sort((a,b)=>b.owed-a.owed).slice(0,5);
+
+  // Top subjects by total
+  const topSubj=[...subjStats].sort((a,b)=>b.total-a.total).slice(0,5);
+  const topSubjHours=[...subjStats].sort((a,b)=>b.hours-a.hours).slice(0,5);
+  const terms=Object.keys(termMap).sort().reverse();
+
+  // ── SVG HELPERS ────────────────────────────────────────
+  function svgBars(items,labelKey,valueKey,color='var(--amber)',maxH=80){
+    if(!items.length)return'';
+    const maxV=Math.max(...items.map(i=>i[valueKey]),1);
+    const W=Math.max(280,items.length*52);
+    const bW=36,gap=16,pad=10;
+    return`<svg viewBox="0 0 ${W} ${maxH+30}" style="width:100%;max-width:${W}px;overflow:visible">
+      ${items.map((item,i)=>{
+        const x=pad+i*(bW+gap);
+        const h=Math.max(2,Math.round((item[valueKey]/maxV)*maxH));
+        const y=maxH-h;
+        const lbl=String(item[labelKey]||'').slice(0,6);
+        return`<rect x="${x}" y="${y}" width="${bW}" height="${h}" rx="4" fill="${color}" opacity=".85"/>
+          <text x="${x+bW/2}" y="${maxH+14}" text-anchor="middle" font-size="9" fill="var(--tx3)" font-family="monospace">${lbl}</text>
+          <text x="${x+bW/2}" y="${y-4}" text-anchor="middle" font-size="8" fill="${color}" font-family="monospace">${Math.round(item[valueKey]/1000)}k</text>`;
+      }).join('')}
+    </svg>`;
   }
 
-  el.innerHTML=`
-    <!-- Subject completion overview -->
-    <div style="font:700 13px/1 var(--mono);color:var(--tx3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:10px">Subject Collection Status</div>
-    ${subjStats.sort((a,b)=>b.owed-a.owed).map(({subj,tot,paid,owed})=>{
-      const done=owed<=0;
-      return`<div style="background:var(--bg1);border:1px solid ${done?'var(--teal)33':'var(--line)'};border-radius:var(--r);padding:12px 14px;margin-bottom:8px">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start">
-          <div style="flex:1">
-            <div style="font:600 14px/1 var(--sans)">${esc(subj.name)}${subj.term?` <span style="font:400 11px/1 var(--mono);color:var(--tx3)">(${esc(subj.term)})</span>`:''}</div>
-            <div style="font:400 11px/1 var(--mono);color:var(--tx3);margin-top:3px">${(subj.sessions||[]).length} sessions</div>
-            ${bar(paid,tot)}
-          </div>
-          <div style="text-align:right;margin-left:14px;flex-shrink:0">
-            <div style="font:600 14px/1 var(--mono);color:var(--amber)">${egp(tot)}</div>
-            <div style="font:400 11px/1 var(--mono);color:var(--teal);margin-top:3px">+${egp(paid)}</div>
-            ${owed>0?`<div style="font:600 11px/1 var(--mono);color:var(--coral);margin-top:2px">${egp(owed)} owed</div>`:
-              `<div style="font:600 11px/1 var(--mono);color:var(--teal);margin-top:2px">✓ Done</div>`}
-          </div>
-        </div>
-      </div>`;
-    }).join('')}
+  function svgLine(pts,maxH=80){
+    if(pts.length<2)return'';
+    const maxV=Math.max(...pts.map(p=>p.v),1);
+    const W=Math.max(280,pts.length*44);
+    const pad=16;const usW=W-pad*2;
+    const coords=pts.map((p,i)=>{
+      const x=pad+Math.round(i/(pts.length-1)*usW);
+      const y=maxH-Math.round((p.v/maxV)*(maxH-10));
+      return{x,y,l:p.l,v:p.v};
+    });
+    const polyline=coords.map(c=>`${c.x},${c.y}`).join(' ');
+    const avgV=Math.round(pts.reduce((a,p)=>a+p.v,0)/pts.length);
+    const avgY=maxH-Math.round((avgV/maxV)*(maxH-10));
+    return`<svg viewBox="0 0 ${W} ${maxH+24}" style="width:100%;overflow:visible">
+      <line x1="${pad}" y1="${avgY}" x2="${W-pad}" y2="${avgY}" stroke="var(--tx3)" stroke-width="1" stroke-dasharray="4,4" opacity=".5"/>
+      <polyline points="${polyline}" fill="none" stroke="var(--amber)" stroke-width="2.5" stroke-linejoin="round"/>
+      ${coords.map(c=>`<circle cx="${c.x}" cy="${c.y}" r="4" fill="var(--amber)"/>
+        <text x="${c.x}" y="${maxH+16}" text-anchor="middle" font-size="9" fill="var(--tx3)" font-family="monospace">${c.l}</text>`).join('')}
+    </svg>`;
+  }
 
-    <!-- Monthly trend -->
-    ${months.length?`
-    <div style="font:700 13px/1 var(--mono);color:var(--tx3);text-transform:uppercase;letter-spacing:.1em;margin:20px 0 10px">Recent Months</div>
-    ${months.map(mo=>{
-      const m=monthly[mo];
-      const label=new Date(mo+'-01').toLocaleString('en',{month:'short',year:'numeric'});
-      return`<div style="background:var(--bg1);border:1px solid var(--line);border-radius:var(--r);padding:10px 14px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">
-        <div><div style="font:600 13px/1 var(--sans)">${label}</div>${bar(m.paid,m.total,'5px')}</div>
-        <div style="text-align:right;margin-left:12px">
-          <div style="font:600 13px/1 var(--mono);color:var(--amber)">${egp(m.total)}</div>
-          <div style="font:400 11px/1 var(--mono);color:var(--teal)">${egp(m.paid)} paid</div>
-          ${m.total-m.paid>0?`<div style="font:400 11px/1 var(--mono);color:var(--coral)">${egp(m.total-m.paid)} owed</div>`:''}
-        </div>
-      </div>`;
-    }).join('')}`:''}
-  `;
+  // ── INSIGHTS ───────────────────────────────────────────
+  const insights=[];
+  if(collRate<70) insights.push({icon:'⚠️',color:'var(--coral)',txt:`Collection rate is ${collRate}% — below 70%. You have ${egp(grandOwed)} uncollected. Follow up with the top debtors below.`});
+  else if(collRate<90) insights.push({icon:'📊',color:'var(--amber)',txt:`Collection rate is ${collRate}%. Good, but ${egp(grandOwed)} is still owed. Push for 90%+.`});
+  else insights.push({icon:'✅',color:'var(--teal)',txt:`Collection rate is ${collRate}% — excellent. You're collecting nearly everything.`});
 
-  // Update header stats
-  const grandOwed=grandTotal-grandPaid;
+  if(passivePct>=30) insights.push({icon:'💡',color:'var(--teal)',txt:`${passivePct}% of your income (${egp(grandPassiveEarned)}) is passive. You earned the equivalent of ${passiveEquivHours} hrs of teaching for free.`});
+  else insights.push({icon:'💡',color:'var(--amber)',txt:`Only ${passivePct}% of income is passive. Expanding recording access could add income without extra teaching time.`});
+
+  if(avgHrRate>0) insights.push({icon:'⏱',color:'var(--blue)',txt:`Your effective rate is ${egp(avgHrRate)}/hr (total earned ÷ teaching hours). Stated live rate earns ${egp(effectiveHrRate)}/hr — passive students add ${egp(avgHrRate-effectiveHrRate)}/hr on top.`});
+
+  if(avgMonthly>0) insights.push({icon:'📅',color:'var(--violet)',txt:`Average monthly income over last ${last6.length} months: ${egp(avgMonthly)} in ${avgMonthlyHours} hrs of teaching.`});
+
+  const busyTerm=terms.reduce((a,t)=>termMap[t].hours>termMap[a||t].hours?t:a,'');
+  if(busyTerm) insights.push({icon:'🗓',color:'var(--tx2)',txt:`Your busiest term was ${busyTerm} with ${Math.round(termMap[busyTerm].hours*10)/10} hrs taught and ${egp(termMap[busyTerm].total)} earned.`});
+
+  // ── RENDER ─────────────────────────────────────────────
   document.getElementById('l-owed').textContent=egp(grandOwed>0?grandOwed:0);
   document.getElementById('l-paid').textContent=egp(grandPaid);
   document.getElementById('l-earn').textContent=egp(grandTotal);
+
+  const SEC=title=>`<div style="font:700 12px/1 var(--mono);color:var(--tx3);text-transform:uppercase;letter-spacing:.1em;margin:22px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--line)">${title}</div>`;
+  const CARD=(content,border='var(--line)')=>`<div style="background:var(--bg1);border:1px solid ${border};border-radius:var(--r);padding:12px 14px;margin-bottom:8px">${content}</div>`;
+  const ROW=(l,v,c='var(--amber)')=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0"><span style="font:400 12px/1 var(--mono);color:var(--tx3)">${l}</span><span style="font:600 13px/1 var(--mono);color:${c}">${v}</span></div>`;
+  const hr=h=>`<div style="font:600 14px/1 var(--mono);color:var(--blue)">${Math.round(h*10)/10} hrs</div>`;
+
+  el.innerHTML=`
+  ${SEC('Insights')}
+  ${insights.map(i=>CARD(`<div style="display:flex;gap:10px;align-items:flex-start"><span style="font-size:18px;flex-shrink:0">${i.icon}</span><div style="font:400 13px/1.6 var(--mono);color:${i.color}">${i.txt}</div></div>`,i.color+'44')).join('')}
+
+  ${SEC('Earnings by Term')}
+  ${terms.length?`<div style="overflow-x:auto;padding-bottom:4px">
+  ${svgBars(terms.map(t=>({l:t,v:termMap[t].total})),'l','v')}
+  </div>
+  ${terms.map(t=>{const tm=termMap[t];const r=tm.total>0?Math.round(tm.paid/tm.total*100):0;return CARD(`
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
+      <div><span style="font:700 15px/1 var(--sans)">Term ${esc(t)}</span><span style="font:400 11px/1 var(--mono);color:var(--tx3);margin-left:8px">${tm.sessions} sessions</span></div>
+      <span style="font:600 13px/1 var(--mono);color:${r>=90?'var(--teal)':r>=70?'var(--amber)':'var(--coral)'}">${r}% collected</span>
+    </div>
+    <div style="height:6px;background:var(--bg3);border-radius:3px;overflow:hidden;margin-bottom:8px"><div style="height:100%;width:${r}%;background:${r>=90?'var(--teal)':r>=70?'var(--amber)':'var(--coral)'}"></div></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
+      ${ROW('Total earned',egp(tm.total))}${ROW('Collected',egp(tm.paid),'var(--teal)')}
+      ${ROW('Owed',egp(tm.total-tm.paid),'var(--coral)')}${ROW('Hours taught',Math.round(tm.hours*10)/10+' hrs','var(--blue)')}
+      ${ROW('Live earned',egp(tm.liveEarned),'var(--amber)')}${ROW('Passive earned',egp(tm.passiveEarned),'var(--violet)')}
+      ${ROW('Effective rate',egp(Math.round(tm.total/(tm.hours||1)))+'/hr','var(--amber)')}${ROW('Passive %',Math.round(tm.total>0?tm.passiveEarned/tm.total*100:0)+'%','var(--violet)')}
+    </div>`)}).join('')}`:'<div class="empty"><div class="empty-tx">No term data yet</div></div>'}
+
+  ${SEC('Monthly Trend (last 12 months)')}
+  ${last6.length>=2?`<div style="overflow-x:auto;padding-bottom:4px">
+  ${svgLine(last6.map(m=>({l:m.slice(5),v:monthly[m].total})))}
+  </div>`:''}
+  ${last6.reverse().map(mo=>{
+    const m=monthly[mo];const r=m.total>0?Math.round(m.paid/m.total*100):0;
+    const lbl=new Date(mo+'-01').toLocaleString('en',{month:'short',year:'2-digit'});
+    return CARD(`<div style="display:flex;justify-content:space-between;align-items:center">
+      <div><div style="font:600 13px/1 var(--sans)">${lbl}</div>
+        <div style="font:400 11px/1 var(--mono);color:var(--tx3)">${Math.round(m.hours*10)/10} hrs taught</div>
+        <div style="height:4px;background:var(--bg3);border-radius:2px;overflow:hidden;margin-top:4px;width:80px"><div style="height:100%;width:${r}%;background:${r>=90?'var(--teal)':r>=70?'var(--amber)':'var(--coral)'}"></div></div>
+      </div>
+      <div style="text-align:right">
+        <div style="font:700 14px/1 var(--mono);color:var(--amber)">${egp(m.total)}</div>
+        <div style="font:400 11px/1 var(--mono);color:var(--teal)">${egp(m.paid)} paid</div>
+        ${m.total-m.paid>0?`<div style="font:400 11px/1 var(--mono);color:var(--coral)">${egp(m.total-m.paid)} owed</div>`:''}
+      </div>
+    </div>`);
+  }).join('')}
+  ${avgMonthly?CARD(`${ROW('Avg monthly income',egp(avgMonthly))}${ROW('Avg monthly hours',avgMonthlyHours+' hrs','var(--blue)')}${ROW('Avg EGP/hr',egp(Math.round(avgMonthly/(avgMonthlyHours||1)))+'/hr')}`):''}
+
+  ${SEC('Live vs Passive')}
+  ${CARD(`
+    <div style="display:flex;gap:0;height:20px;border-radius:10px;overflow:hidden;margin-bottom:10px">
+      <div style="flex:${grandLiveEarned};background:var(--amber);opacity:.85"></div>
+      <div style="flex:${grandPassiveEarned};background:var(--violet);opacity:.85"></div>
+    </div>
+    <div style="display:flex;gap:16px;margin-bottom:10px">
+      <div><div style="font:400 10px/1 var(--mono);color:var(--amber)">■ LIVE</div><div style="font:700 14px/1 var(--mono);color:var(--amber)">${egp(grandLiveEarned)}</div><div style="font:400 10px/1 var(--mono);color:var(--tx3)">${100-passivePct}%</div></div>
+      <div><div style="font:400 10px/1 var(--mono);color:var(--violet)">■ PASSIVE</div><div style="font:700 14px/1 var(--mono);color:var(--violet)">${egp(grandPassiveEarned)}</div><div style="font:400 10px/1 var(--mono);color:var(--tx3)">${passivePct}%</div></div>
+    </div>
+    ${ROW('Passive income = teaching time saved',passiveEquivHours+' hrs','var(--violet)')}
+    ${ROW('You taught',Math.round(grandHours*10)/10+' hrs live','var(--blue)')}
+    ${ROW('Effective rate (live+passive)',egp(avgHrRate)+'/hr')}
+  `)}
+
+  ${SEC('Hours by Subject')}
+  <div style="overflow-x:auto;padding-bottom:4px">${svgBars(topSubjHours.map(s=>({l:s.subj.name.slice(0,8),v:s.hours})),'l','v','var(--blue)')}</div>
+  ${topSubjHours.map(s=>CARD(`
+    <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+      <span style="font:600 13px/1 var(--sans)">${esc(s.subj.name)}</span>
+      <span style="font:600 13px/1 var(--mono);color:var(--blue)">${Math.round(s.hours*10)/10} hrs</span>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
+      ${ROW('Sessions',s.sessions,'var(--tx2)')}${ROW('Total earned',egp(s.total))}
+      ${ROW('Live earned',egp(s.liveEarned),'var(--amber)')}${ROW('Passive earned',egp(s.passiveEarned),'var(--violet)')}
+      ${ROW('Rate/hr',egp(Math.round(s.total/(s.hours||1)))+'/hr')}${ROW('Passive %',Math.round(s.total>0?s.passiveEarned/s.total*100:0)+'%','var(--violet)')}
+    </div>
+  `)).join('')}
+
+  ${SEC('Top Subjects by Earnings')}
+  <div style="overflow-x:auto;padding-bottom:4px">${svgBars(topSubj.map(s=>({l:s.subj.name.slice(0,8),v:s.total})),'l','v')}</div>
+  ${topSubj.map((s,i)=>CARD(`
+    <div style="display:flex;align-items:center;gap:10px">
+      <div style="font:800 22px/1 var(--sans);color:var(--bg3);width:28px">#${i+1}</div>
+      <div style="flex:1">
+        <div style="font:600 13px/1 var(--sans)">${esc(s.subj.name)}${s.subj.term?` <span style="color:var(--tx3);font-weight:400">(${esc(s.subj.term)})</span>`:''}</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px;margin-top:5px">
+          ${ROW('Total',egp(s.total))}${ROW('Owed',egp(s.owed),'var(--coral)')}
+          ${ROW('Hours',Math.round(s.hours*10)/10+' hrs','var(--blue)')}${ROW('Sessions',s.sessions,'var(--tx2)')}
+        </div>
+      </div>
+    </div>
+  `)).join('')}
+
+  ${SEC('Top Students — Owed to You')}
+  ${stuOwed.length?stuOwed.map((s,i)=>CARD(`
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="font:800 18px/1 var(--sans);color:var(--bg3)">#${i+1}</span>
+        <div><div style="font:600 13px/1 var(--sans)">${esc(s.name)}</div>
+          <div style="font:400 11px/1 var(--mono);color:var(--teal)">paid ${egp(s.paid)}</div></div>
+      </div>
+      <span style="font:700 16px/1 var(--mono);color:var(--coral)">${egp(s.owed)}</span>
+    </div>
+  `,'var(--coral)33')).join(''):'<div class="empty"><div class="empty-tx">No unpaid balances ✓</div></div>'}
+
+  ${SEC('By University')}
+  ${Object.entries(uniMap).sort((a,b)=>b[1].total-a[1].total).map(([uni,u])=>CARD(`
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
+      <span style="font:700 15px/1 var(--sans);color:${collegeColor(uni)}">${esc(uni)}</span>
+      <span style="font:600 13px/1 var(--mono);color:var(--amber)">${egp(u.total)}</span>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
+      ${ROW('Collected',egp(u.paid),'var(--teal)')}${ROW('Owed',egp(u.total-u.paid),'var(--coral)')}
+      ${ROW('Hours taught',Math.round(u.hours*10)/10+' hrs','var(--blue)')}${ROW('Sessions',u.sessions,'var(--tx2)')}
+      ${ROW('Students',u.students.size,'var(--tx2)')}${ROW('Collection',Math.round(u.total>0?u.paid/u.total*100:0)+'%',u.total>0&&u.paid/u.total>=.9?'var(--teal)':'var(--amber)')}
+    </div>
+  `)).join('')}
+  `;
+
   await loadHeaderStats();
 }
 
-function renderLedgerList(){} // kept for compatibility — analysis tab has no sort dropdown
+function renderLedgerList(){}
 
 function renderSessCard(s){
   const st=s.session_students||[], tot=st.reduce((a,r)=>a+(r.amount||0),0);
@@ -1437,9 +1609,9 @@ let subjectsData=[];
 async function loadSubjectsTab(){
   const el=document.getElementById('subjects-list');
   el.innerHTML='<div class="loading">Loading…</div>';
-  let{data,error}=await sb.from('subjects').select(`id,name,term,sessions(id,date,rate,t_charge_min,total_worth,session_name,session_students(id,amount,student_type,student_id,students(name)))`).order('name');
+  let{data,error}=await sb.from('subjects').select(`id,name,term,sessions(id,date,rate,t_charge_min,total_worth,session_name,session_students(id,amount,paid,student_type,student_id,students(name)))`).order('name');
   if(error){
-    const r2=await sb.from('subjects').select(`id,name,term,sessions(id,date,rate,t_charge_min,total_worth,session_students(id,amount,student_type,student_id,students(name)))`).order('name');
+    const r2=await sb.from('subjects').select(`id,name,term,sessions(id,date,rate,t_charge_min,total_worth,session_students(id,amount,paid,student_type,student_id,students(name)))`).order('name');
     if(r2.error){el.innerHTML='<div class="empty"><div class="empty-ic">⚠️</div><div class="empty-tx" style="color:var(--coral)">'+esc(r2.error.message)+'</div></div>';return;}
     data=r2.data;
   }
