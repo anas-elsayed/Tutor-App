@@ -475,6 +475,8 @@ create policy "all" on app_settings for all using(true) with check(true);</div>
           <option value="term_desc">Term (Z→A)</option>
           <option value="total_desc">Total earned (highest)</option>
           <option value="sessions_desc">Session count (most)</option>
+          <option value="completion_asc">Completion % (lowest first)</option>
+          <option value="completion_desc">Completion % (highest first)</option>
         </select>
       </div>
       <div class="fld">
@@ -484,6 +486,9 @@ create policy "all" on app_settings for all using(true) with check(true);</div>
           <option value="date_asc">Date (oldest first)</option>
           <option value="name_asc">Session Name (A→Z)</option>
           <option value="duration_desc">Duration (longest first)</option>
+          <option value="completion_asc">Completion % (lowest first)</option>
+          <option value="completion_desc">Completion % (highest first)</option>
+          <option value="amount_desc">Amount (highest first)</option>
         </select>
       </div>
     </div>
@@ -909,13 +914,14 @@ async function loadLedger(){
   const avgMonthly=last6.length?Math.round(last6.reduce((a,m)=>a+monthly[m].total,0)/last6.length):0;
   const avgMonthlyHours=last6.length?Math.round(last6.reduce((a,m)=>a+monthly[m].hours,0)/last6.length*10)/10:0;
 
-  // Top students by owed
+  // Top students by total revenue (paid + owed = everything they paid you overall)
   const stuOwed=students.map(s=>{
     const rows=s.session_students||[];
-    const owed=rows.filter(r=>!r.paid).reduce((a,r)=>a+(r.amount||0),0);
     const paid=rows.filter(r=>r.paid).reduce((a,r)=>a+(r.amount||0),0);
-    return{name:s.name,owed,paid};
-  }).filter(x=>x.owed>0).sort((a,b)=>b.owed-a.owed).slice(0,5);
+    const owed=rows.filter(r=>!r.paid).reduce((a,r)=>a+(r.amount||0),0);
+    const total=paid+owed;
+    return{name:s.name,owed,paid,total};
+  }).filter(x=>x.total>0).sort((a,b)=>b.total-a.total).slice(0,5);
 
   // Top subjects by total
   const topSubj=[...subjStats].sort((a,b)=>b.total-a.total).slice(0,5);
@@ -1074,17 +1080,22 @@ async function loadLedger(){
     </div>
   `)).join('')}
 
-  ${SEC('Top Students — Owed to You')}
+  ${SEC('Top Students by Revenue')}
   ${stuOwed.length?stuOwed.map((s,i)=>CARD(`
     <div style="display:flex;justify-content:space-between;align-items:center">
       <div style="display:flex;align-items:center;gap:10px">
         <span style="font:800 18px/1 var(--sans);color:var(--bg3)">#${i+1}</span>
-        <div><div style="font:600 13px/1 var(--sans)">${esc(s.name)}</div>
-          <div style="font:400 11px/1 var(--mono);color:var(--teal)">paid ${egp(s.paid)}</div></div>
+        <div>
+          <div style="font:600 13px/1 var(--sans)">${esc(s.name)}</div>
+          <div style="display:flex;gap:8px;margin-top:3px">
+            <span style="font:400 11px/1 var(--mono);color:var(--teal)">paid ${egp(s.paid)}</span>
+            ${s.owed>0?`<span style="font:400 11px/1 var(--mono);color:var(--coral)">owes ${egp(s.owed)}</span>`:''}
+          </div>
+        </div>
       </div>
-      <span style="font:700 16px/1 var(--mono);color:var(--coral)">${egp(s.owed)}</span>
+      <span style="font:700 16px/1 var(--mono);color:var(--amber)">${egp(s.total)}</span>
     </div>
-  `,'var(--coral)33')).join(''):'<div class="empty"><div class="empty-tx">No unpaid balances ✓</div></div>'}
+  `)).join(''):'<div class="empty"><div class="empty-tx">No students yet</div></div>'}
 
   ${SEC('By University')}
   ${Object.entries(uniMap).sort((a,b)=>b[1].total-a[1].total).map(([uni,u])=>CARD(`
@@ -1629,17 +1640,21 @@ function renderSubjectsList(){
 
   const withTotals=subjectsData.map(subj=>{
     const sess=subj.sessions||[];
-    const tot=sess.reduce((a,s)=>a+(s.total_worth||0),0);
+    const tot=sess.reduce((a,s)=>a+(s.session_students||[]).reduce((b,r)=>b+(r.amount||0),0),0);
     const paidTot=sess.reduce((a,s)=>a+(s.session_students||[]).filter(r=>r.paid).reduce((b,r)=>b+(r.amount||0),0),0);
     return{subj,sess,tot,paidTot};
   });
   withTotals.sort((a,b)=>{
+    const aPct=a.tot>0?a.paidTot/a.tot:0;
+    const bPct=b.tot>0?b.paidTot/b.tot:0;
     switch(subjSortKey){
       case 'name_asc': return a.subj.name.localeCompare(b.subj.name);
       case 'term_asc': return (a.subj.term||'').localeCompare(b.subj.term||'');
       case 'term_desc': return (b.subj.term||'').localeCompare(a.subj.term||'');
       case 'total_desc': return b.tot-a.tot;
       case 'sessions_desc': return b.sess.length-a.sess.length;
+      case 'completion_asc': return aPct-bPct;
+      case 'completion_desc': return bPct-aPct;
       default: return 0;
     }
   });
@@ -1655,11 +1670,18 @@ function renderSubjectsList(){
 
   el.innerHTML=withTotals.map(({subj,sess,tot,paidTot})=>{
     const sortedSess=[...sess].sort((a,b)=>{
+      const aR=a.session_students?.reduce((s,r)=>s+(r.amount||0),0)||0;
+      const bR=b.session_students?.reduce((s,r)=>s+(r.amount||0),0)||0;
+      const aPaid=a.session_students?.filter(r=>r.paid).reduce((s,r)=>s+(r.amount||0),0)||0;
+      const bPaid=b.session_students?.filter(r=>r.paid).reduce((s,r)=>s+(r.amount||0),0)||0;
       switch(sessSortKey){
         case 'date_asc': return (a.date||'').localeCompare(b.date||'');
         case 'date_desc': return (b.date||'').localeCompare(a.date||'');
         case 'name_asc': return (a.session_name||'').localeCompare(b.session_name||'');
         case 'duration_desc': return (b.t_charge_min||0)-(a.t_charge_min||0);
+        case 'completion_asc': return (aR>0?aPaid/aR:0)-(bR>0?bPaid/bR:0);
+        case 'completion_desc': return (bR>0?bPaid/bR:0)-(aR>0?aPaid/aR:0);
+        case 'amount_desc': return bR-aR;
         default: return 0;
       }
     });
@@ -1709,7 +1731,7 @@ function renderSubjectsList(){
               ${meterBar(sPaid,sReal,'4px')}
             </div>
             <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;margin-left:10px">
-              <span style="font:600 14px/1 var(--mono);color:${sDone?'var(--teal)':'var(--amber)'}">${egp(s.total_worth||0)}</span>
+              <span style="font:600 14px/1 var(--mono);color:${sDone?'var(--teal)':'var(--amber)'}">${egp(sReal)}</span>
               ${sOwed>0?`<span style="font:400 10px/1 var(--mono);color:var(--coral)">${egp(sOwed)} owed</span>`:
                 sReal>0?`<span style="font:600 10px/1 var(--mono);color:var(--teal)">✓</span>`:''}
               <span class="chev" id="chev-ss${s.id}">▼</span>
