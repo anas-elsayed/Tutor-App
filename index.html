@@ -336,6 +336,7 @@ create policy "all" on app_settings for all using(true) with check(true);</div>
       <div class="hnum owed"><div class="hnum-lbl">Owed</div><div class="hnum-val" id="hdr-owed">—</div></div>
       <div class="hnum paid"><div class="hnum-lbl">Paid</div><div class="hnum-val" id="hdr-paid">—</div></div>
     </div>
+    <div id="hdr-scope" style="font:400 10px/1 var(--mono);color:var(--tx3);text-align:right;margin-top:2px;cursor:pointer" onclick="goTab('settings')">▸ All time</div>
   </div>
 
   <div class="tabs">
@@ -519,6 +520,28 @@ create policy "all" on app_settings for all using(true) with check(true);</div>
   <!-- TAB: SETTINGS -->
   <div class="pg" id="pg-settings">
     <div class="ptitle">Settings</div>
+    <div class="card">
+      <div class="card-h" style="cursor:default"><span style="font-size:16px;font-weight:700">Header Display</span></div>
+      <div class="card-b">
+        <div style="font:400 12px/1.6 var(--mono);color:var(--tx3);margin-bottom:12px">Choose what the Owed / Paid numbers at the top of the screen show.</div>
+        <div class="fld">
+          <label>Scope</label>
+          <select class="inp" id="hdr-scope-sel" onchange="saveHeaderScope()">
+            <option value="all">All time</option>
+            <option value="month_current">This month</option>
+            <option value="month_last">Last month</option>
+            <option value="term_auto">Current term (latest)</option>
+          </select>
+        </div>
+        <div id="hdr-term-picker" style="display:none" class="fld">
+          <label>Specific term</label>
+          <select class="inp" id="hdr-term-sel" onchange="saveHeaderScope()">
+            <option value="">Loading terms…</option>
+          </select>
+        </div>
+        <div id="hdr-scope-preview" style="font:400 11px/1.6 var(--mono);color:var(--teal);margin-top:6px"></div>
+      </div>
+    </div>
     <div class="card">
       <div class="card-h" style="cursor:default"><span style="font-size:16px;font-weight:700">General</span></div>
       <div class="card-b">
@@ -773,7 +796,7 @@ async function saveSetup(){
 
 async function loadAll(){
   const{data:settings}=await sb.from('app_settings').select('*');
-  if(settings){settings.forEach(s=>{if(s.key==='your_email')YOUR_EMAIL=s.value;if(s.key==='silence_threshold_sec')SILENCE_THRESHOLD=parseInt(s.value)||180;});}
+  if(settings){settings.forEach(s=>{if(s.key==='your_email')YOUR_EMAIL=s.value;if(s.key==='silence_threshold_sec')SILENCE_THRESHOLD=parseInt(s.value)||180;if(s.key==='header_scope')headerScope=s.value;});}
   await refreshSubjects();
   await Promise.all([loadLedger(),loadStudents(),loadSubjectsTab(),loadEditTab('sessions'),loadSettings(),loadHeaderStats()]);
   // Keep-alive: schedule a silent ping every 24h while the app is open.
@@ -791,6 +814,59 @@ function scheduleKeepAlive(){
 async function refreshSubjects(){
   const{data}=await sb.from('subjects').select('id,name,term');
   subjectsCache=data||[];
+}
+
+// Latest term = highest term value in cache (used to prefer current-term subjects)
+function latestTerm(){
+  const terms=subjectsCache.map(s=>s.term).filter(Boolean);
+  return terms.length?terms.sort().reverse()[0]:null;
+}
+
+// Build grouped <option> elements for a subject dropdown.
+// Current term appears first as plain options.
+// Older terms are grouped under <optgroup label="Older — Term X">.
+// Returns HTML string. If withAuto=true, first option is the auto-detect one.
+function subjectOptions(autoLabel=null){
+  const lt=latestTerm();
+  const current=subjectsCache.filter(s=>s.term===lt||(!lt&&!s.term));
+  const older=subjectsCache.filter(s=>s.term!==lt&&(lt||s.term));
+  // Group older by term
+  const olderByTerm={};
+  older.forEach(s=>{
+    const t=s.term||'—';
+    if(!olderByTerm[t])olderByTerm[t]=[];
+    olderByTerm[t].push(s);
+  });
+  const olderTerms=Object.keys(olderByTerm).sort().reverse();
+
+  let html=autoLabel?`<option value="">${autoLabel}</option>`:'';
+  if(lt) html+=`<optgroup label="── Term ${lt} (current) ──" style="color:var(--amber)">`;
+  html+=current.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
+  if(lt) html+=`</optgroup>`;
+  olderTerms.forEach(t=>{
+    html+=`<optgroup label="Older — Term ${t}">`;
+    html+=olderByTerm[t].map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
+    html+=`</optgroup>`;
+  });
+  return html;
+}
+
+// When auto-matching a subject by name, prefer current term over older ones
+function findSubjectByName(name){
+  if(!name)return null;
+  const lt=latestTerm();
+  const n=name.toLowerCase();
+  // 1. Exact match in current term
+  const exactCurrent=subjectsCache.find(s=>s.term===lt&&s.name.toLowerCase()===n);
+  if(exactCurrent)return exactCurrent;
+  // 2. Partial match in current term
+  const partialCurrent=subjectsCache.find(s=>s.term===lt&&(s.name.toLowerCase().includes(n)||n.includes(s.name.toLowerCase())));
+  if(partialCurrent)return partialCurrent;
+  // 3. Exact match in any term (fallback)
+  const exactAny=subjectsCache.find(s=>s.name.toLowerCase()===n);
+  if(exactAny)return exactAny;
+  // 4. Partial match anywhere
+  return subjectsCache.find(s=>s.name.toLowerCase().includes(n)||n.includes(s.name.toLowerCase()))||null;
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -829,18 +905,137 @@ function goTab(id){
 // ══════════════════════════════════════════════════════════════════════════════
 // HEADER STATS
 // ══════════════════════════════════════════════════════════════════════════════
+// ── HEADER SCOPE ─────────────────────────────────────────────────────────────
+let headerScope='all'; // persisted in app_settings key 'header_scope'
+
+async function loadHeaderScope(){
+  const{data}=await sb.from('app_settings').select('key,value').in('key',['header_scope','header_term']);
+  const map=Object.fromEntries((data||[]).map(r=>[r.key,r.value]));
+  headerScope=map.header_scope||'all';
+  const sel=document.getElementById('hdr-scope-sel');
+  if(!sel)return;
+  // Populate term options
+  const{data:terms}=await sb.from('subjects').select('term').not('term','is',null);
+  const uniqueTerms=[...new Set((terms||[]).map(t=>t.term).filter(Boolean))].sort().reverse();
+  const termSel=document.getElementById('hdr-term-sel');
+  if(termSel){
+    termSel.innerHTML=uniqueTerms.map(t=>`<option value="term_${t}">Term ${t}</option>`).join('');
+    if(uniqueTerms.length)termSel.value=map.header_term?`term_${map.header_term}`:`term_${uniqueTerms[0]}`;
+  }
+  // Set selector
+  if(['all','month_current','month_last','term_auto'].includes(headerScope)){
+    sel.value=headerScope;
+    document.getElementById('hdr-term-picker').style.display='none';
+  } else if(headerScope.startsWith('term_')){
+    sel.value='term_auto'; // show term picker
+    sel.innerHTML=sel.innerHTML.replace('value="term_auto">Current term (latest)','value="term_auto">Specific term');
+    document.getElementById('hdr-term-picker').style.display='';
+    if(termSel)termSel.value=headerScope;
+    sel.value=headerScope; // will not match — switch to specific
+    // Add specific term option
+    if(!sel.querySelector(`option[value="${headerScope}"]`)){
+      const opt=document.createElement('option');
+      opt.value=headerScope; opt.textContent='Specific term';
+      sel.appendChild(opt);
+    }
+    sel.value=headerScope;
+  }
+}
+
+async function saveHeaderScope(){
+  const sel=document.getElementById('hdr-scope-sel');
+  const termSel=document.getElementById('hdr-term-sel');
+  let scope=sel?.value||'all';
+  const termPicker=document.getElementById('hdr-term-picker');
+  // Show/hide specific term picker
+  if(scope==='term_auto'){
+    if(termPicker)termPicker.style.display='';
+  } else {
+    if(termPicker)termPicker.style.display='none';
+  }
+  // If they picked a specific term from the term dropdown
+  if(scope==='term_auto'&&termSel?.value){
+    scope=termSel.value;
+  }
+  headerScope=scope;
+  await sb.from('app_settings').upsert({key:'header_scope',value:scope});
+  if(scope.startsWith('term_')){
+    await sb.from('app_settings').upsert({key:'header_term',value:scope.replace('term_','')});
+  }
+  await loadHeaderStats();
+}
+
+function scopeLabel(){
+  if(headerScope==='all')return'All time';
+  if(headerScope==='month_current')return'This month';
+  if(headerScope==='month_last')return'Last month';
+  if(headerScope==='term_auto')return'Current term';
+  if(headerScope.startsWith('term_'))return`Term ${headerScope.replace('term_','')}`;
+  return'';
+}
+
 async function loadHeaderStats(){
-  const{data,error}=await sb.from('session_students').select('amount,paid');
+  // Build query — join through sessions→subjects to filter by term/month
+  let query=sb.from('session_students').select('amount,paid,student_id,sessions(date,subjects(term))');
+
+  // Apply scope filter
+  const now=new Date();
+  if(headerScope==='month_current'){
+    const ym=now.toISOString().slice(0,7); // "2026-05"
+    // We'll filter client-side after fetch since Supabase nested filters are complex
+  } else if(headerScope==='month_last'){
+    // same — filter client-side
+  }
+
+  const{data,error}=await query;
   if(error||!data)return;
-  const rawOwed=data.filter(r=>!r.paid).reduce((a,r)=>a+(r.amount||0),0);
-  const totalDiscount=Object.values(discountCache).reduce((a,v)=>a+v,0);
-  const owed=Math.max(0,rawOwed-totalDiscount);
-  const paid=data.filter(r=>r.paid).reduce((a,r)=>a+(r.amount||0),0);
+
+  // Client-side scope filtering
+  let rows=data;
+  if(headerScope==='month_current'){
+    const ym=now.toISOString().slice(0,7);
+    rows=data.filter(r=>(r.sessions?.date||'').startsWith(ym));
+  } else if(headerScope==='month_last'){
+    const d=new Date(now.getFullYear(),now.getMonth()-1,1);
+    const ym=d.toISOString().slice(0,7);
+    rows=data.filter(r=>(r.sessions?.date||'').startsWith(ym));
+  } else if(headerScope==='term_auto'){
+    // Find the most recent term
+    const terms=[...new Set(data.map(r=>r.sessions?.subjects?.term).filter(Boolean))].sort();
+    const latestTerm=terms[terms.length-1];
+    rows=data.filter(r=>r.sessions?.subjects?.term===latestTerm);
+  } else if(headerScope.startsWith('term_')){
+    const term=headerScope.replace('term_','');
+    rows=data.filter(r=>r.sessions?.subjects?.term===term);
+  }
+
+  // Group by student, apply per-student discounts
+  const byStudent={};
+  rows.forEach(r=>{
+    const id=r.student_id;
+    if(!byStudent[id])byStudent[id]={owed:0,paid:0};
+    if(r.paid)byStudent[id].paid+=(r.amount||0);
+    else byStudent[id].owed+=(r.amount||0);
+  });
+  let owed=0,paid=0;
+  Object.entries(byStudent).forEach(([id,s])=>{
+    const disc=headerScope==='all'?(discountCache[parseInt(id)]||0):0; // discounts only in all-time view
+    owed+=Math.max(0,s.owed-disc);
+    paid+=s.paid;
+  });
+
+  // Update header
   document.getElementById('hdr-owed').textContent=egp(owed);
   document.getElementById('hdr-paid').textContent=egp(paid);
-  document.getElementById('l-owed').textContent=egp(owed);
-  document.getElementById('l-paid').textContent=egp(paid);
-  document.getElementById('l-earn').textContent=egp(owed+paid);
+  const scopeEl=document.getElementById('hdr-scope');
+  if(scopeEl)scopeEl.textContent=`▸ ${scopeLabel()}`;
+  // Update analysis tab totals if open
+  const lOwed=document.getElementById('l-owed');
+  const lPaid=document.getElementById('l-paid');
+  const lEarn=document.getElementById('l-earn');
+  if(lOwed)lOwed.textContent=egp(owed);
+  if(lPaid)lPaid.textContent=egp(paid);
+  if(lEarn)lEarn.textContent=egp(owed+paid);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -1593,24 +1788,23 @@ async function markAllStudentPaid(stuId,paidState){
 }
 
 function recalcHeaderFromDOM(){
-  // Recalculate from in-memory studentsData + discountCache (reliable even when sections collapsed)
-  let totalOwed=0,totalPaid=0;
+  let owed=0,paid=0;
   (studentsData||[]).forEach(stu=>{
     const rows=stu.session_students||[];
     const rawOwed=rows.filter(r=>!r.paid).reduce((a,r)=>a+(r.amount||0),0);
-    const paid=rows.filter(r=>r.paid).reduce((a,r)=>a+(r.amount||0),0);
+    const stuPaid=rows.filter(r=>r.paid).reduce((a,r)=>a+(r.amount||0),0);
     const disc=discountCache[stu.id]||0;
-    totalOwed+=Math.max(0,rawOwed-disc);
-    totalPaid+=paid;
+    owed+=Math.max(0,rawOwed-disc); // per-student discount, never over-subtracts
+    paid+=stuPaid;
   });
-  document.getElementById('hdr-owed').textContent=egp(totalOwed);
-  document.getElementById('hdr-paid').textContent=egp(totalPaid);
+  document.getElementById('hdr-owed').textContent=egp(owed);
+  document.getElementById('hdr-paid').textContent=egp(paid);
   const lOwed=document.getElementById('l-owed');
   const lPaid=document.getElementById('l-paid');
   const lEarn=document.getElementById('l-earn');
-  if(lOwed)lOwed.textContent=egp(totalOwed);
-  if(lPaid)lPaid.textContent=egp(totalPaid);
-  if(lEarn)lEarn.textContent=egp(totalOwed+totalPaid);
+  if(lOwed)lOwed.textContent=egp(owed);
+  if(lPaid)lPaid.textContent=egp(paid);
+  if(lEarn)lEarn.textContent=egp(owed+paid);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -2048,6 +2242,7 @@ async function delSessionStudent(ssId,sessId){
 // SETTINGS
 // ══════════════════════════════════════════════════════════════════════════════
 async function loadSettings(){
+  await loadHeaderScope();
   document.getElementById('s-email').value=YOUR_EMAIL;
   document.getElementById('s-thresh').value=SILENCE_THRESHOLD;
   const{data}=await sb.from('subjects').select('id,name').order('name');
@@ -2188,12 +2383,12 @@ async function renderVttRes(){
         style="flex:1;min-width:110px;padding:9px 11px;font-size:13px"/>
     </div>`).join(''):'<div style="font:400 12px/1 var(--mono);color:var(--tx3)">No other participants found.</div>';
   const sel=document.getElementById('vtt-subj');
-  sel.innerHTML=`<option value="">Auto: "${esc(a.subjName)}"</option>`+subjectsCache.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
+  const autoTerm=fnMatch?.term?` (Term ${fnMatch.term})`:''; sel.innerHTML=subjectOptions(`Auto: "${esc(a.subjName)}"${autoTerm}`);
   document.getElementById('vtt-date').value=a.detectedDate||new Date().toISOString().slice(0,10);
   // Populate editable duration — user can override before saving
   document.getElementById('vtt-duration').value=a.T_charge_min||0;
   // Auto-select subject: filename match > last used subject
-  const fnMatch=subjectsCache.find(s=>s.name.toLowerCase()===a.subjName.toLowerCase() || a.subjName.toLowerCase().includes(s.name.toLowerCase()));
+  const fnMatch=findSubjectByName(a.subjName);
   const subjectToUse=fnMatch?.id||lastSubjectId||null;
   if(subjectToUse)sel.value=subjectToUse;
   // Restore last rate
@@ -2316,7 +2511,7 @@ async function processVttQueue(){
     }
     const sn=subjFromFn(file.name);
     // Resolve subject: match filename > last used
-    let subjectId=subjectsCache.find(s=>s.name.toLowerCase()===sn.toLowerCase()||sn.toLowerCase().includes(s.name.toLowerCase()))?.id||lastSubjectId;
+    let subjectId=findSubjectByName(sn)?.id||lastSubjectId;
     if(!subjectId){
       // Can't auto-determine subject — open modal for this one file
       vttAna={...ana,subjName:sn,filename:file.name,detectedDate:det};
@@ -2438,16 +2633,16 @@ async function openMod(id){
 
   if(id==='manual-mod'){
     document.getElementById('m-date').value=new Date().toISOString().slice(0,10);
-    document.getElementById('m-subj').innerHTML=subjectsCache.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
+    document.getElementById('m-subj').innerHTML=subjectOptions();
     manualStus=[]; document.getElementById('m-stus').innerHTML=''; document.getElementById('m-preview').innerHTML='';
     autoFillManualName();
   }
   if(id==='vtt-mod'){
-    document.getElementById('vtt-subj').innerHTML=`<option value="">Auto-detect from filename</option>`+subjectsCache.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
+    document.getElementById('vtt-subj').innerHTML=subjectOptions('Auto-detect from filename');
     if(lastSubjectId){document.getElementById('vtt-subj').value=lastSubjectId;}
     if(lastRate){document.getElementById('vtt-rate').value=lastRate;}
   }
-  if(id==='excel-mod') document.getElementById('xl-subj').innerHTML=subjectsCache.map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
+  if(id==='excel-mod') document.getElementById('xl-subj').innerHTML=subjectOptions();
   document.getElementById(id).classList.add('on');
 }
 function closeMod(id){document.getElementById(id).classList.remove('on');}
@@ -2517,11 +2712,27 @@ async function openPassiveFlow(){
   openMod('passive-mod');
   // Always fetch fresh from DB — cache may be empty if project was paused on startup
   await refreshSubjects();
-  document.getElementById('pass-subj-list').innerHTML=subjectsCache.map(s=>`
-    <div class="ec" style="flex-direction:row;text-align:left;gap:12px;padding:14px 16px;margin-bottom:8px" onclick="passPickSubj(${s.id},'${esc(s.name)}')">
-      <div class="ec-icon" style="font-size:24px">📚</div>
-      <div><div style="font-size:15px;font-weight:700">${esc(s.name)}</div>${s.term?`<div style="font:400 11px/1 var(--mono);color:var(--tx3)">Term ${esc(s.term)}</div>`:''}</div>
-    </div>`).join('')||'<div class="empty"><div class="empty-tx">No subjects — create one in Settings</div></div>';
+  {
+    const lt=latestTerm();
+    const current=subjectsCache.filter(s=>s.term===lt||(!lt&&!s.term));
+    const older=subjectsCache.filter(s=>s.term!==lt&&(lt||s.term));
+    const cardHtml=arr=>arr.map(s=>`
+      <div class="ec" style="flex-direction:row;text-align:left;gap:12px;padding:14px 16px;margin-bottom:8px" onclick="passPickSubj(${s.id},'${esc(s.name)}')">
+        <div class="ec-icon" style="font-size:24px">📚</div>
+        <div><div style="font-size:15px;font-weight:700">${esc(s.name)}</div>
+          ${s.term?`<div style="font:400 11px/1 var(--mono);color:var(--tx3)">Term ${esc(s.term)}</div>`:''}
+        </div>
+      </div>`).join('');
+    const olderSec=older.length?`
+      <div style="font:700 11px/1 var(--mono);color:var(--tx3);text-transform:uppercase;letter-spacing:.1em;padding:10px 0 6px;cursor:pointer"
+        onclick="const el=document.getElementById('pass-older-list');el.style.display=el.style.display==='none'?'':'none'">
+        ▶ Older subjects (${older.length})</div>
+      <div id="pass-older-list" style="display:none">${cardHtml(older)}</div>`:'' ;
+    document.getElementById('pass-subj-list').innerHTML=
+      (lt?`<div style="font:700 11px/1 var(--mono);color:var(--amber);text-transform:uppercase;letter-spacing:.1em;padding:0 0 8px">Term ${lt} — Current</div>`:'')
+      +cardHtml(current)+olderSec
+      ||('<div class="empty"><div class="empty-tx">No subjects — create one in Settings</div></div>');
+  }
 }
 
 async function passPickSubj(subjId,name){
@@ -2866,18 +3077,33 @@ async function runBatch(){
 // HELPERS
 // ══════════════════════════════════════════════════════════════════════════════
 async function upsertStudent(name,email=null){
-  // Normalize: trim whitespace to avoid "باهر " vs "باهر" duplicates
-  const cleanName=(name||'').trim();
+  // Strip invisible chars (RTL marks, zero-width spaces) and normalize Unicode
+  // Arabic keyboards often insert U+200F (RTL mark) or U+FEFF (BOM) silently
+  const cleanName=(name||'')
+    .replace(/[\u200B-\u200F\uFEFF\u202A-\u202E]/g,'') // invisible directional/zero-width
+    .normalize('NFC') // consistent Unicode form
+    .trim();
   if(!cleanName)return null;
-  // Always look up by name first — don't rely on DB unique constraint alone
-  const{data:existing}=await sb.from('students').select('id,name,email').eq('name',cleanName).maybeSingle();
-  if(existing){
-    // Update email if we now have one and didn't before
+
+  // Use ilike (case-insensitive) + limit(1) so we:
+  //  a) match even if keyboard changed case (rare in Arabic but safe)
+  //  b) don't crash if duplicates already exist in the DB
+  const{data:rows}=await sb.from('students').select('id,name,email').ilike('name',cleanName).limit(2);
+  if(rows&&rows.length>0){
+    const existing=rows[0];
     if(email&&!existing.email) await sb.from('students').update({email}).eq('id',existing.id);
     return existing.id;
   }
-  // Not found — insert new student
-  const{data:created}=await sb.from('students').insert({name:cleanName,email:email||null,default_rate:0}).select('id').single();
+
+  // Not found — insert new
+  const{data:created,error}=await sb.from('students')
+    .insert({name:cleanName,email:email||null,default_rate:0})
+    .select('id').single();
+  if(error){
+    // Race condition: another insert happened between our check and insert — fetch it
+    const{data:retry}=await sb.from('students').select('id').ilike('name',cleanName).limit(1).single();
+    return retry?.id||null;
+  }
   return created?.id||null;
 }
 
